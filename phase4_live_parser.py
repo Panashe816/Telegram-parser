@@ -11,41 +11,137 @@ from telethon.sessions import StringSession
 
 
 # ============================================================
-# LOAD ENVIRONMENT VARIABLES
+# PHASE 4 — LIVE TELEGRAM GOLD SIGNAL PARSER
+# ============================================================
+#
+# PURPOSE:
+#
+#   Monitor the configured Telegram gold-signal channels,
+#   parse incoming gold signals,
+#   validate them,
+#   determine the correct execution TPs,
+#   and publish the parsed result to Guns' Goldbot.
+#
+# IMPORTANT:
+#
+#   THIS SERVICE DOES NOT:
+#
+#       - connect to MetaApi
+#       - connect to MT5
+#       - place trades
+#       - modify trades
+#       - close trades
+#
+#   This is PARSER ONLY.
+#
+#   The future Phase 6 executor will handle DEMO trading.
+#
+# ============================================================
+
+
+# ============================================================
+# LOAD ENVIRONMENT
 # ============================================================
 
 load_dotenv()
 
-API_ID = int(os.getenv("TELEGRAM_API_ID", "14424659"))
-API_HASH = os.getenv("TELEGRAM_API_HASH")
-
-# Render will use TELEGRAM_SESSION_STRING.
-# Local development can fall back to the .session file.
-SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING")
-LOCAL_SESSION_NAME = os.getenv("TELEGRAM_LOCAL_SESSION", "gold_signal_bot")
-
-# Private Telegram queue/output channel
-TEST_OUTPUT_CHANNEL_ID = int(
-    os.getenv("TELEGRAM_CHANNEL_ID", "-1002933896146")
+API_ID = int(
+    os.getenv(
+        "TELEGRAM_API_ID",
+        "14424659"
+    )
 )
+
+API_HASH = os.getenv(
+    "TELEGRAM_API_HASH"
+)
+
+# Render:
+#   TELEGRAM_SESSION_STRING
+#
+# Local:
+#   gold_signal_bot.session
+#
+SESSION_STRING = os.getenv(
+    "TELEGRAM_SESSION_STRING"
+)
+
+LOCAL_SESSION_NAME = os.getenv(
+    "TELEGRAM_LOCAL_SESSION",
+    "gold_signal_bot"
+)
+
+# Private Telegram queue / monitoring channel
+TEST_OUTPUT_CHANNEL_ID = int(
+    os.getenv(
+        "TELEGRAM_CHANNEL_ID",
+        "-1002933896146"
+    )
+)
+
+TIMEZONE = pytz.timezone(
+    "Africa/Harare"
+)
+
+
+# ============================================================
+# CONFIGURATION VALIDATION
+# ============================================================
+
+if not API_HASH:
+    raise RuntimeError(
+        "TELEGRAM_API_HASH is missing."
+    )
 
 
 # ============================================================
 # SOURCE CHANNELS
 # ============================================================
-# These are the ONLY channels monitored by the parser.
 #
-# IMPORTANT:
-# The IDs are deliberately used instead of usernames.
+# FIVE REAL SIGNAL SOURCES
+# PLUS GUNS THE TRADER AS TEST SOURCE
+#
+# Numeric IDs are deliberately used instead of usernames.
+#
 # ============================================================
 
 SOURCE_CHANNELS = [
-    -1001920682501,  # Gold Signals 98% Sure
-    -1002000548854,  # GOLD HUNTER TRADE
-    -1001859361786,  # GOLD SIGNAL VIP
-    -1001392009006,  # SCALPING MARKET TRADING
-    -1001509147302,  # Smart Money Trader
-    -1003170522699,  # GUNS THE TRADER - TEST SOURCE
+
+    # --------------------------------------------------------
+    # REAL SOURCE 1
+    # --------------------------------------------------------
+
+    -1001920682501,      # Gold Signals 98% Sure
+
+    # --------------------------------------------------------
+    # REAL SOURCE 2
+    # --------------------------------------------------------
+
+    -1002000548854,      # GOLD HUNTER TRADE
+
+    # --------------------------------------------------------
+    # REAL SOURCE 3
+    # --------------------------------------------------------
+
+    -1001859361786,      # GOLD SIGNAL VIP
+
+    # --------------------------------------------------------
+    # REAL SOURCE 4
+    # --------------------------------------------------------
+
+    -1001392009006,      # SCALPING MARKET TRADING
+
+    # --------------------------------------------------------
+    # REAL SOURCE 5
+    # --------------------------------------------------------
+
+    -1001509147302,      # Smart Money Trader
+
+    # --------------------------------------------------------
+    # TEST SOURCE
+    # --------------------------------------------------------
+
+    -1003170522699,      # GUNS THE TRADER
 ]
 
 
@@ -53,19 +149,56 @@ SOURCE_CHANNELS = [
 # EXECUTION TP MAPPING
 # ============================================================
 #
-# Each source has its own execution targets.
+# Each channel has its own two execution targets.
 #
-# Format:
-# channel_id: (first_execution_tp, second_execution_tp)
+# Gold Signals 98% Sure       -> TP3 + TP4
+# GOLD HUNTER TRADE            -> TP3 + TP4
+# GOLD SIGNAL VIP              -> TP3 + TP6
+# SCALPING MARKET TRADING      -> TP4 + TP7
+# Smart Money Trader           -> TP4 + TP6
+# GUNS THE TRADER              -> TP3 + TP4
+#
 # ============================================================
 
 TP_MAPPING = {
-    -1001920682501: (3, 4),  # Gold Signals 98% Sure
-    -1002000548854: (3, 4),  # GOLD HUNTER TRADE
-    -1001859361786: (3, 6),  # GOLD SIGNAL VIP
-    -1001392009006: (4, 7),  # SCALPING MARKET TRADING
-    -1001509147302: (4, 6),  # Smart Money Trader
-    -1003170522699: (3, 4),  # GUNS THE TRADER
+
+    -1001920682501: (3, 4),
+
+    -1002000548854: (3, 4),
+
+    -1001859361786: (3, 6),
+
+    -1001392009006: (4, 7),
+
+    -1001509147302: (4, 6),
+
+    -1003170522699: (3, 4),
+}
+
+
+# ============================================================
+# CHANNEL DISPLAY NAMES
+# ============================================================
+
+CHANNEL_DISPLAY_NAMES = {
+
+    -1001920682501:
+        "Gold Signals 98% Sure",
+
+    -1002000548854:
+        "GOLD HUNTER TRADE",
+
+    -1001859361786:
+        "GOLD SIGNAL VIP",
+
+    -1001392009006:
+        "SCALPING MARKET TRADING®SMT",
+
+    -1001509147302:
+        "🔻Smart Money Trader🔻",
+
+    -1003170522699:
+        "GUNS THE TRADER",
 }
 
 
@@ -74,10 +207,6 @@ TP_MAPPING = {
 # ============================================================
 
 def normalize_channel_name(name):
-    """
-    Normalize Telegram channel names so that title-based
-    fallback matching is more reliable.
-    """
 
     if not name:
         return ""
@@ -85,6 +214,8 @@ def normalize_channel_name(name):
     text = str(name).upper()
 
     replacements = {
+
+        # Bold Unicode letters
         "𝗚": "G",
         "𝗢": "O",
         "𝗟": "L",
@@ -97,82 +228,119 @@ def normalize_channel_name(name):
         "𝗥": "R",
         "𝗦": "S",
         "𝗜": "I",
-        "𝗚": "G",
-        "𝗡": "N",
         "𝗔": "A",
-        "𝗟": "L",
         "𝗩": "V",
         "𝗣": "P",
         "𝗠": "M",
         "𝗞": "K",
-        "𝗧": "T",
-        "𝗥": "R",
-        "𝗔": "A",
-        "𝗗": "D",
-        "𝗘": "E",
+
+        # Mathematical bold
+        "𝐆": "G",
+        "𝐎": "O",
+        "𝐋": "L",
+        "𝐃": "D",
+        "𝐇": "H",
+        "𝐔": "U",
+        "𝐍": "N",
+        "𝐓": "T",
+        "𝐄": "E",
+        "𝐑": "R",
+        "𝐒": "S",
+        "𝐈": "I",
+        "𝐀": "A",
+        "𝐕": "V",
+        "𝐏": "P",
+        "𝐌": "M",
+        "𝐊": "K",
+
+        "®": " ",
+        "™": " ",
     }
 
     for old, new in replacements.items():
-        text = text.replace(old, new)
+        text = text.replace(
+            old,
+            new
+        )
 
-    # Remove common symbols / emoji
-    text = text.replace("®", " ")
-    text = text.replace("™", " ")
+    # Remove emoji/symbols
+    text = re.sub(
+        r"[^A-Z0-9]+",
+        " ",
+        text
+    )
 
-    # Keep alphanumeric characters and spaces
-    text = re.sub(r"[^A-Z0-9]+", " ", text)
-
-    return " ".join(text.split())
+    return " ".join(
+        text.split()
+    )
 
 
 # ============================================================
 # TP MAPPING LOOKUP
 # ============================================================
 
-def get_tp_mapping(channel_id=None, channel_name=None):
-    """
-    Return the two execution TP numbers for a source channel.
-
-    Numeric channel ID is the primary method.
-    Channel name is only a fallback.
-    """
+def get_tp_mapping(
+    channel_id=None,
+    channel_name=None
+):
 
     # --------------------------------------------------------
-    # PRIMARY: NUMERIC CHANNEL ID
+    # PRIMARY METHOD:
+    # NUMERIC CHANNEL ID
     # --------------------------------------------------------
 
     if channel_id is not None:
+
         try:
-            channel_id = int(channel_id)
+
+            channel_id = int(
+                channel_id
+            )
 
             if channel_id in TP_MAPPING:
-                return TP_MAPPING[channel_id]
 
-        except (ValueError, TypeError):
+                return TP_MAPPING[
+                    channel_id
+                ]
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
             pass
 
     # --------------------------------------------------------
-    # FALLBACK: CHANNEL NAME
+    # FALLBACK:
+    # CHANNEL NAME
     # --------------------------------------------------------
 
-    normalized = normalize_channel_name(channel_name)
+    normalized = normalize_channel_name(
+        channel_name
+    )
 
     if "GOLD SIGNALS 98 SURE" in normalized:
+
         return 3, 4
 
     if "GOLD HUNTER TRADE" in normalized:
+
         return 3, 4
 
     if "GOLD SIGNAL VIP" in normalized:
+
         return 3, 6
 
     if "SCALPING MARKET TRADING" in normalized:
+
         return 4, 7
 
     if "SMART MONEY TRADER" in normalized:
+
         return 4, 6
 
     if "GUNS THE TRADER" in normalized:
+
         return 3, 4
 
     return None
@@ -183,17 +351,39 @@ def get_tp_mapping(channel_id=None, channel_name=None):
 # ============================================================
 
 def normalize_text(text):
-    """
-    Normalize signal text while preserving the numerical data.
-    """
 
     if not text:
+
         return ""
 
-    text = text.replace(",", "")
-    text = text.replace("–", "-")
-    text = text.replace("—", "-")
-    text = text.replace("−", "-")
+    text = str(text)
+
+    # Normalize line endings
+    text = text.replace(
+        "\r",
+        "\n"
+    )
+
+    # Non-breaking space
+    text = text.replace(
+        "\u00A0",
+        " "
+    )
+
+    # Normalize dashes
+    text = (
+        text
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace("−", "-")
+    )
+
+    # Normalize tabs
+    text = re.sub(
+        r"[ \t]+",
+        " ",
+        text
+    )
 
     return text.strip()
 
@@ -203,46 +393,177 @@ def normalize_text(text):
 # ============================================================
 
 def extract_direction(text):
-    """
-    Detect BUY or SELL.
-    """
 
-    match = re.search(r"\b(BUY|SELL)\b", text, re.IGNORECASE)
+    if not text:
 
-    if not match:
         return None
 
-    return match.group(1).upper()
+    text_upper = text.upper()
+
+    if re.search(
+        r"\bBUY\b",
+        text_upper
+    ):
+
+        return "BUY"
+
+    if re.search(
+        r"\bSELL\b",
+        text_upper
+    ):
+
+        return "SELL"
+
+    return None
 
 
 # ============================================================
-# ENTRY
+# ENTRY EXTRACTION
+# ============================================================
+#
+# Supports:
+#
+# BUY 4642/4650
+# BUY 4642 - 4650
+# BUY 4642-4650
+#
+# ENTRY 4642/4650
+# ENTRY: 4642/4650
+#
+# GOLD BUY 4642
+# GOLD SELL 4642
+#
+# XAUUSD BUY 4642
+# XAU BUY 4642
+#
+# BUY GOLD NOW 4642
+# SELL GOLD NOW 4642
+#
 # ============================================================
 
 def extract_entry(text):
-    """
-    Extract entry range.
 
-    Supported examples:
+    if not text:
 
-    BUY 4642/4650
-    BUY 4642 - 4650
-    BUY 4642-4650
-    """
+        return None
 
-    patterns = [
-        r"\b(?:BUY|SELL)\s+(\d+(?:\.\d+)?)\s*[/\-]\s*(\d+(?:\.\d+)?)",
-        r"\bENTRY\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*[/\-]\s*(\d+(?:\.\d+)?)",
+    # --------------------------------------------------------
+    # RANGE PATTERNS
+    # --------------------------------------------------------
+
+    range_patterns = [
+
+        # BUY/SELL followed directly by range
+        (
+            r"\b(?:BUY|SELL)\b\s+"
+            r"(\d+(?:\.\d+)?)"
+            r"\s*[/_]\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        (
+            r"\b(?:BUY|SELL)\b\s+"
+            r"(\d+(?:\.\d+)?)"
+            r"\s*-\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        # ENTRY followed by range
+        (
+            r"\bENTRY\b\s*[:.\-]?\s*"
+            r"(\d+(?:\.\d+)?)"
+            r"\s*[/_]\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        (
+            r"\bENTRY\b\s*[:.\-]?\s*"
+            r"(\d+(?:\.\d+)?)"
+            r"\s*-\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
     ]
 
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
+    for pattern in range_patterns:
+
+        match = re.search(
+            pattern,
+            text,
+            re.IGNORECASE
+        )
 
         if match:
-            price_a = float(match.group(1))
-            price_b = float(match.group(2))
 
-            return min(price_a, price_b), max(price_a, price_b)
+            a = float(
+                match.group(1)
+            )
+
+            b = float(
+                match.group(2)
+            )
+
+            return (
+                min(a, b),
+                max(a, b),
+                "RANGE"
+            )
+
+    # --------------------------------------------------------
+    # SINGLE PRICE PATTERNS
+    # --------------------------------------------------------
+
+    single_patterns = [
+
+        # GOLD BUY 4642
+        (
+            r"\b(?:GOLD|XAUUSD|XAU)\b\s+"
+            r"(?:BUY|SELL)\b"
+            r"(?:\s+NOW)?\s+"
+            r"(\d+(?:\.\d+)?)"
+            r"(?:\s+00\b)?"
+        ),
+
+        # BUY GOLD 4642
+        (
+            r"\b(?:BUY|SELL)\b\s+"
+            r"(?:GOLD|XAUUSD|XAU)\b"
+            r"(?:\s+NOW)?\s+"
+            r"(\d+(?:\.\d+)?)"
+            r"(?:\s+00\b)?"
+        ),
+
+        # ENTRY: 4642
+        (
+            r"\bENTRY\b\s*[:.\-]?\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        # BUY 4642
+        (
+            r"\b(?:BUY|SELL)\b\s+"
+            r"(\d+(?:\.\d+)?)"
+        ),
+    ]
+
+    for pattern in single_patterns:
+
+        match = re.search(
+            pattern,
+            text,
+            re.IGNORECASE
+        )
+
+        if match:
+
+            value = float(
+                match.group(1)
+            )
+
+            return (
+                value,
+                value,
+                "SINGLE"
+            )
 
     return None
 
@@ -252,253 +573,493 @@ def extract_entry(text):
 # ============================================================
 
 def extract_sl(text):
-    """
-    Extract stop loss.
-    """
+
+    if not text:
+
+        return None
 
     patterns = [
-        r"\bSL\s*[:\-]?\s*(\d+(?:\.\d+)?)",
-        r"\bSTOP\s*LOSS\s*[:\-]?\s*(\d+(?:\.\d+)?)",
+
+        # SL 4640
+        r"\bSL\b\s*[:.\-]?\s*"
+        r"(\d+(?:\.\d+)?)",
+
+        # STOPLOSS 4640
+        r"\bSTOPLOSS\b\s*[:.\-]?\s*"
+        r"(\d+(?:\.\d+)?)",
+
+        # STOP LOSS 4640
+        r"\bSTOP\s+LOSS\b\s*[:.\-]?\s*"
+        r"(\d+(?:\.\d+)?)",
+
+        # STOP 4640
+        r"\bSTOP\b\s*[:.\-]?\s*"
+        r"(\d+(?:\.\d+)?)",
     ]
 
     for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
+
+        match = re.search(
+            pattern,
+            text,
+            re.IGNORECASE
+        )
 
         if match:
-            return float(match.group(1))
+
+            return float(
+                match.group(1)
+            )
 
     return None
 
 
 # ============================================================
-# TAKE PROFIT LEVELS
+# TAKE PROFIT EXTRACTION
+# ============================================================
+#
+# Supports TP1 through TP9.
+#
+# Examples:
+#
+# TP1 4655
+# TP1: 4655
+# TP1 - 4655
+# TP1=4655
+# TP1. 4655
+#
 # ============================================================
 
 def extract_tp_levels(text):
-    """
-    Extract TP1 through TP9.
 
-    Example:
+    if not text:
 
-    TP1 4655
-    TP2 4660
-    TP3 4670
-    TP4 4680
-    """
+        return {}
 
     tp_levels = {}
 
-    pattern = r"\bTP\s*([1-9])\s*[:\-]?\s*(\d+(?:\.\d+)?)"
+    pattern = (
+        r"\bTP\s*([1-9])"
+        r"\s*[:.\-=]?"
+        r"\s*"
+        r"(\d+(?:\.\d+)?)"
+    )
 
-    matches = re.findall(pattern, text, re.IGNORECASE)
+    matches = re.findall(
+        pattern,
+        text,
+        re.IGNORECASE
+    )
 
     for tp_number, price in matches:
-        tp_levels[int(tp_number)] = float(price)
 
-    return tp_levels
+        tp_levels[
+            int(tp_number)
+        ] = float(price)
+
+    return dict(
+        sorted(
+            tp_levels.items()
+        )
+    )
 
 
 # ============================================================
-# GOLD PRICE VALIDATION
+# PRICE VALIDATION
 # ============================================================
 
-def validate_gold_price_range(price):
-    """
-    Basic sanity check for XAU/USD prices.
-    """
+def validate_gold_price_range(
+    price
+):
 
     if price is None:
+
         return False
 
-    return 1800 <= price <= 6000
+    return (
+        1800 <= price <= 6000
+    )
 
 
 # ============================================================
-# SIGNAL VALIDATION
+# FULL SIGNAL VALIDATION
 # ============================================================
 
 def validate_signal(
     direction,
     entry_low,
     entry_high,
-    sl,
+    stoploss,
     tp_levels,
     execution_tps
 ):
-    """
-    Validate all required fields and the execution targets.
-    """
 
-    if direction not in ("BUY", "SELL"):
-        return False, "Invalid direction"
+    errors = []
 
-    if entry_low is None or entry_high is None:
-        return False, "Entry price/range not found"
+    # --------------------------------------------------------
+    # DIRECTION
+    # --------------------------------------------------------
 
-    if not validate_gold_price_range(entry_low):
-        return False, f"Entry price {entry_low} is outside XAUUSD range"
+    if direction not in (
+        "BUY",
+        "SELL"
+    ):
 
-    if not validate_gold_price_range(entry_high):
-        return False, f"Entry price {entry_high} is outside XAUUSD range"
+        errors.append(
+            "Missing or invalid BUY/SELL direction"
+        )
 
-    if entry_low > entry_high:
-        return False, "Entry range is invalid"
+    # --------------------------------------------------------
+    # ENTRY
+    # --------------------------------------------------------
 
-    # Prevent accidentally enormous ranges
-    if entry_high - entry_low > 100:
-        return False, "Entry range is wider than 100 points"
+    if entry_low is None:
 
-    if sl is None:
-        return False, "Stop loss not found"
+        errors.append(
+            "Missing entry"
+        )
 
-    if not validate_gold_price_range(sl):
-        return False, f"SL {sl} is outside XAUUSD range"
+    if entry_high is None:
+
+        errors.append(
+            "Missing entry"
+        )
+
+    if (
+        entry_low is not None
+        and entry_high is not None
+    ):
+
+        if entry_low > entry_high:
+
+            errors.append(
+                "Invalid entry range"
+            )
+
+        if (
+            entry_high - entry_low
+        ) > 100:
+
+            errors.append(
+                f"Entry range too wide: "
+                f"{entry_low}-{entry_high}"
+            )
+
+        if not validate_gold_price_range(
+            entry_low
+        ):
+
+            errors.append(
+                f"Entry price {entry_low} "
+                f"is outside XAUUSD range"
+            )
+
+        if not validate_gold_price_range(
+            entry_high
+        ):
+
+            errors.append(
+                f"Entry price {entry_high} "
+                f"is outside XAUUSD range"
+            )
+
+    # --------------------------------------------------------
+    # STOP LOSS
+    # --------------------------------------------------------
+
+    if stoploss is None:
+
+        errors.append(
+            "Missing stop loss"
+        )
+
+    else:
+
+        if not validate_gold_price_range(
+            stoploss
+        ):
+
+            errors.append(
+                f"SL {stoploss} "
+                f"is outside XAUUSD range"
+            )
 
     # --------------------------------------------------------
     # SL DIRECTION
     # --------------------------------------------------------
 
-    if direction == "BUY":
-        if sl >= entry_low:
-            return False, (
-                f"BUY SL {sl} is not below entry {entry_low}"
-            )
+    if (
+        direction == "BUY"
+        and entry_low is not None
+        and stoploss is not None
+    ):
 
-    elif direction == "SELL":
-        if sl <= entry_high:
-            return False, (
-                f"SELL SL {sl} is not above entry {entry_high}"
-            )
+        if stoploss >= entry_low:
 
-    # --------------------------------------------------------
-    # EXECUTION TP REQUIREMENTS
-    # --------------------------------------------------------
-
-    tp1_number, tp2_number = execution_tps
-
-    if tp1_number not in tp_levels:
-        return False, f"Required TP{tp1_number} not found"
-
-    if tp2_number not in tp_levels:
-        return False, f"Required TP{tp2_number} not found"
-
-    execution_price_1 = tp_levels[tp1_number]
-    execution_price_2 = tp_levels[tp2_number]
-
-    # --------------------------------------------------------
-    # TP DIRECTION VALIDATION
-    # --------------------------------------------------------
-
-    if direction == "BUY":
-
-        if execution_price_1 <= entry_high:
-            return False, (
-                f"BUY execution TP{tp1_number} "
-                f"{execution_price_1} is not above entry "
-                f"{entry_high}"
-            )
-
-        if execution_price_2 <= entry_high:
-            return False, (
-                f"BUY execution TP{tp2_number} "
-                f"{execution_price_2} is not above entry "
-                f"{entry_high}"
-            )
-
-    elif direction == "SELL":
-
-        if execution_price_1 >= entry_low:
-            return False, (
-                f"SELL execution TP{tp1_number} "
-                f"{execution_price_1} is not below entry "
+            errors.append(
+                f"BUY SL {stoploss} "
+                f"is not below entry "
                 f"{entry_low}"
             )
 
-        if execution_price_2 >= entry_low:
-            return False, (
-                f"SELL execution TP{tp2_number} "
-                f"{execution_price_2} is not below entry "
+    if (
+        direction == "SELL"
+        and entry_high is not None
+        and stoploss is not None
+    ):
+
+        if stoploss <= entry_high:
+
+            errors.append(
+                f"SELL SL {stoploss} "
+                f"is not above entry "
+                f"{entry_high}"
+            )
+
+    # --------------------------------------------------------
+    # EXECUTION TP MAPPING
+    # --------------------------------------------------------
+
+    if not execution_tps:
+
+        errors.append(
+            "No execution TP mapping found"
+        )
+
+        return (
+            False,
+            errors
+        )
+
+    tp_number_1, tp_number_2 = (
+        execution_tps
+    )
+
+    # --------------------------------------------------------
+    # REQUIRED EXECUTION TPs
+    # --------------------------------------------------------
+
+    execution_tp_1 = tp_levels.get(
+        tp_number_1
+    )
+
+    execution_tp_2 = tp_levels.get(
+        tp_number_2
+    )
+
+    if execution_tp_1 is None:
+
+        errors.append(
+            f"Required TP{tp_number_1} "
+            f"not found"
+        )
+
+    if execution_tp_2 is None:
+
+        errors.append(
+            f"Required TP{tp_number_2} "
+            f"not found"
+        )
+
+    # --------------------------------------------------------
+    # VALIDATE ALL PRESENT TP PRICES
+    # --------------------------------------------------------
+
+    for tp_number, price in tp_levels.items():
+
+        if not validate_gold_price_range(
+            price
+        ):
+
+            errors.append(
+                f"TP{tp_number} price "
+                f"{price} is outside "
+                f"XAUUSD range"
+            )
+
+    # --------------------------------------------------------
+    # EXECUTION TP DIRECTION
+    # --------------------------------------------------------
+
+    if (
+        direction == "BUY"
+        and entry_high is not None
+    ):
+
+        if (
+            execution_tp_1 is not None
+            and execution_tp_1 <= entry_high
+        ):
+
+            errors.append(
+                f"BUY execution TP"
+                f"{tp_number_1} "
+                f"{execution_tp_1} "
+                f"is not above entry "
+                f"{entry_high}"
+            )
+
+        if (
+            execution_tp_2 is not None
+            and execution_tp_2 <= entry_high
+        ):
+
+            errors.append(
+                f"BUY execution TP"
+                f"{tp_number_2} "
+                f"{execution_tp_2} "
+                f"is not above entry "
+                f"{entry_high}"
+            )
+
+    elif (
+        direction == "SELL"
+        and entry_low is not None
+    ):
+
+        if (
+            execution_tp_1 is not None
+            and execution_tp_1 >= entry_low
+        ):
+
+            errors.append(
+                f"SELL execution TP"
+                f"{tp_number_1} "
+                f"{execution_tp_1} "
+                f"is not below entry "
                 f"{entry_low}"
             )
 
-    return True, None
+        if (
+            execution_tp_2 is not None
+            and execution_tp_2 >= entry_low
+        ):
+
+            errors.append(
+                f"SELL execution TP"
+                f"{tp_number_2} "
+                f"{execution_tp_2} "
+                f"is not below entry "
+                f"{entry_low}"
+            )
+
+    if errors:
+
+        return (
+            False,
+            errors
+        )
+
+    return (
+        True,
+        []
+    )
 
 
 # ============================================================
 # PARSE SIGNAL
 # ============================================================
 
-def parse_signal(text, channel_id=None, channel_name=None):
-    """
-    Parse and validate one Telegram signal.
-    """
+def parse_signal(
+    message,
+    channel_name,
+    channel_id=None
+):
 
-    text = normalize_text(text)
+    message = normalize_text(
+        message
+    )
 
-    direction = extract_direction(text)
-    entry = extract_entry(text)
-    sl = extract_sl(text)
-    tp_levels = extract_tp_levels(text)
+    direction = extract_direction(
+        message
+    )
+
+    entry = extract_entry(
+        message
+    )
+
+    stoploss = extract_sl(
+        message
+    )
+
+    tp_levels = extract_tp_levels(
+        message
+    )
+
+    # --------------------------------------------------------
+    # ENTRY
+    # --------------------------------------------------------
+
+    entry_low = None
+    entry_high = None
+    entry_type = None
+
+    if entry:
+
+        entry_low = entry[0]
+        entry_high = entry[1]
+        entry_type = entry[2]
 
     # --------------------------------------------------------
     # TP MAPPING
     # --------------------------------------------------------
 
-    execution_tps = get_tp_mapping(
+    mapping = get_tp_mapping(
         channel_id=channel_id,
         channel_name=channel_name
     )
 
-    if execution_tps is None:
+    # --------------------------------------------------------
+    # BASIC VALIDATION
+    # --------------------------------------------------------
+
+    if mapping is None:
+
         return {
             "valid": False,
-            "reason": "Unknown source channel / TP mapping",
+            "reason":
+                "Unknown source channel / "
+                "TP mapping",
+            "channel": channel_name,
+            "channel_id": channel_id,
             "direction": direction,
-            "entry": entry,
-            "sl": sl,
+            "entry_low": entry_low,
+            "entry_high": entry_high,
+            "entry_type": entry_type,
+            "sl": stoploss,
+            "stoploss": stoploss,
             "tp_levels": tp_levels,
             "execution_tps": None,
+            "execution_tp_numbers": None,
+            "execution_tp1": None,
+            "execution_tp2": None,
+            "validation_errors": [
+                "Unknown source channel / TP mapping"
+            ],
         }
-
-    # --------------------------------------------------------
-    # BASIC EXTRACTION VALIDATION
-    # --------------------------------------------------------
-
-    if direction is None:
-        return {
-            "valid": False,
-            "reason": "BUY/SELL direction not found",
-            "direction": None,
-            "entry": entry,
-            "sl": sl,
-            "tp_levels": tp_levels,
-            "execution_tps": execution_tps,
-        }
-
-    if entry is None:
-        return {
-            "valid": False,
-            "reason": "Entry range not found",
-            "direction": direction,
-            "entry": None,
-            "sl": sl,
-            "tp_levels": tp_levels,
-            "execution_tps": execution_tps,
-        }
-
-    entry_low, entry_high = entry
 
     # --------------------------------------------------------
     # FULL VALIDATION
     # --------------------------------------------------------
 
-    valid, reason = validate_signal(
+    valid, errors = validate_signal(
         direction=direction,
         entry_low=entry_low,
         entry_high=entry_high,
-        sl=sl,
+        stoploss=stoploss,
         tp_levels=tp_levels,
-        execution_tps=execution_tps
+        execution_tps=mapping
+    )
+
+    tp_number_1 = mapping[0]
+    tp_number_2 = mapping[1]
+
+    execution_tp_1 = tp_levels.get(
+        tp_number_1
+    )
+
+    execution_tp_2 = tp_levels.get(
+        tp_number_2
     )
 
     # --------------------------------------------------------
@@ -506,19 +1067,104 @@ def parse_signal(text, channel_id=None, channel_name=None):
     # --------------------------------------------------------
 
     result = {
-        "valid": valid,
-        "reason": reason,
-        "direction": direction,
-        "entry_low": entry_low,
-        "entry_high": entry_high,
-        "sl": sl,
-        "tp_levels": tp_levels,
-        "execution_tps": execution_tps,
-    }
 
-    if valid:
-        result["execution_price_1"] = tp_levels[execution_tps[0]]
-        result["execution_price_2"] = tp_levels[execution_tps[1]]
+        "valid": valid,
+
+        "reason": (
+            None
+            if valid
+            else (
+                "; ".join(errors)
+                if errors
+                else "Signal rejected"
+            )
+        ),
+
+        "channel": channel_name,
+
+        "channel_id": channel_id,
+
+        "normalized_channel":
+            normalize_channel_name(
+                channel_name
+            ),
+
+        "direction": direction,
+
+        "entry": (
+            entry_low
+            if entry_low == entry_high
+            else (
+                (
+                    entry_low,
+                    entry_high
+                )
+                if entry_low is not None
+                else None
+            )
+        ),
+
+        "entry_low": entry_low,
+
+        "entry_high": entry_high,
+
+        "entry_type": entry_type,
+
+        "sl": stoploss,
+
+        "stoploss": stoploss,
+
+        "tp_levels": tp_levels,
+
+        "tp1": tp_levels.get(1),
+
+        "tp2": tp_levels.get(2),
+
+        "tp3": tp_levels.get(3),
+
+        "tp4": tp_levels.get(4),
+
+        "tp5": tp_levels.get(5),
+
+        "tp6": tp_levels.get(6),
+
+        "tp7": tp_levels.get(7),
+
+        "tp8": tp_levels.get(8),
+
+        "tp9": tp_levels.get(9),
+
+        "execution_tps": mapping,
+
+        "execution_tp_numbers": mapping,
+
+        "execution_tp1_number":
+            tp_number_1,
+
+        "execution_tp2_number":
+            tp_number_2,
+
+        "execution_tp1":
+            execution_tp_1,
+
+        "execution_tp2":
+            execution_tp_2,
+
+        "execution_price_1":
+            execution_tp_1,
+
+        "execution_price_2":
+            execution_tp_2,
+
+        "parse_success": valid,
+
+        "validation_errors": errors,
+
+        "timestamp":
+            datetime.now(
+                TIMEZONE
+            ),
+    }
 
     return result
 
@@ -528,42 +1174,131 @@ def parse_signal(text, channel_id=None, channel_name=None):
 # ============================================================
 
 def format_parsed_signal(
-    result,
-    channel_name,
-    timestamp
+    signal
 ):
-    """
-    Format a valid parsed signal for Guns' Goldbot.
-    """
 
-    direction = result["direction"]
-    entry_low = result["entry_low"]
-    entry_high = result["entry_high"]
-    sl = result["sl"]
+    direction = signal.get(
+        "direction"
+    )
 
-    tp_levels = result["tp_levels"]
-    execution_tps = result["execution_tps"]
+    entry_low = signal.get(
+        "entry_low"
+    )
 
-    execution_price_1 = result["execution_price_1"]
-    execution_price_2 = result["execution_price_2"]
+    entry_high = signal.get(
+        "entry_high"
+    )
+
+    stoploss = signal.get(
+        "stoploss"
+    )
+
+    channel_name = signal.get(
+        "channel"
+    )
+
+    tp_levels = signal.get(
+        "tp_levels",
+        {}
+    )
+
+    mapping = signal.get(
+        "execution_tp_numbers"
+    )
+
+    execution_tp_1 = signal.get(
+        "execution_tp1"
+    )
+
+    execution_tp_2 = signal.get(
+        "execution_tp2"
+    )
+
+    timestamp = signal.get(
+        "timestamp"
+    )
+
+    if timestamp:
+
+        timestamp_text = timestamp.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+    else:
+
+        timestamp_text = (
+            datetime.now(
+                TIMEZONE
+            ).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        )
+
+    # --------------------------------------------------------
+    # ENTRY DISPLAY
+    # --------------------------------------------------------
+
+    if (
+        entry_low is not None
+        and entry_high is not None
+    ):
+
+        if entry_low == entry_high:
+
+            entry_text = (
+                f"{entry_low:.2f}"
+            )
+
+        else:
+
+            entry_text = (
+                f"{entry_low:.2f}"
+                f" - "
+                f"{entry_high:.2f}"
+            )
+
+    else:
+
+        entry_text = "N/A"
+
+    # --------------------------------------------------------
+    # BUILD MESSAGE
+    # --------------------------------------------------------
 
     lines = [
+
         "🟢 SIGNAL PARSED",
+
         "────────────────────",
+
         f"📺 Channel: {channel_name}",
+
         "💎 Asset: XAU/USD",
+
         f"🎯 Direction: {direction}",
-        f"💰 Entry: {entry_low:.2f} - {entry_high:.2f}",
-        f"🛑 SL: {sl:.2f}",
+
+        f"💰 Entry: {entry_text}",
+
+        (
+            f"🛑 SL: "
+            f"{stoploss:.2f}"
+            if stoploss is not None
+            else "🛑 SL: N/A"
+        ),
+
     ]
 
     # --------------------------------------------------------
     # ALL TPs
     # --------------------------------------------------------
 
-    for tp_number in sorted(tp_levels):
+    for tp_number in sorted(
+        tp_levels
+    ):
+
         lines.append(
-            f"🎯 TP{tp_number}: {tp_levels[tp_number]:.2f}"
+            f"🎯 TP{tp_number}: "
+            f"{tp_levels[tp_number]:.2f}"
         )
 
     # --------------------------------------------------------
@@ -571,22 +1306,57 @@ def format_parsed_signal(
     # --------------------------------------------------------
 
     lines.extend([
+
         "",
+
         "📌 EXECUTION TARGETS",
-        (
-            f"Position 1 → TP{execution_tps[0]}: "
-            f"{execution_price_1:.2f}"
-        ),
-        (
-            f"Position 2 → TP{execution_tps[1]}: "
-            f"{execution_price_2:.2f}"
-        ),
-        "────────────────────",
-        "✅ Parser Status: VALID",
-        f"⏰ {timestamp}",
+
     ])
 
-    return "\n".join(lines)
+    if mapping:
+
+        lines.append(
+            f"Position 1 → "
+            f"TP{mapping[0]} "
+            f"({execution_tp_1:.2f})"
+        )
+
+        lines.append(
+            f"Position 2 → "
+            f"TP{mapping[1]} "
+            f"({execution_tp_2:.2f})"
+        )
+
+    else:
+
+        lines.append(
+            "No execution mapping"
+        )
+
+    # --------------------------------------------------------
+    # STATUS
+    # --------------------------------------------------------
+
+    lines.extend([
+
+        "",
+
+        "✅ Parser Status: VALID",
+
+        f"🕒 Timestamp: "
+        f"{timestamp_text}",
+
+        "────────────────────",
+
+        "⚠️ DEMO PIPELINE ONLY",
+
+        "No trade executed by Phase 4.",
+
+    ])
+
+    return "\n".join(
+        lines
+    )
 
 
 # ============================================================
@@ -594,94 +1364,242 @@ def format_parsed_signal(
 # ============================================================
 
 def format_rejected_signal(
-    result,
-    channel_name,
+    signal,
     raw_text
 ):
-    """
-    Format a rejected signal for Guns' Goldbot.
-    """
 
-    direction = result.get("direction")
-    entry_low = result.get("entry_low")
-    entry_high = result.get("entry_high")
-    sl = result.get("sl")
-    tp_levels = result.get("tp_levels", {})
-    execution_tps = result.get("execution_tps")
+    channel_name = signal.get(
+        "channel"
+    )
+
+    direction = signal.get(
+        "direction"
+    )
+
+    entry_low = signal.get(
+        "entry_low"
+    )
+
+    entry_high = signal.get(
+        "entry_high"
+    )
+
+    stoploss = signal.get(
+        "stoploss"
+    )
+
+    tp_levels = signal.get(
+        "tp_levels",
+        {}
+    )
+
+    mapping = signal.get(
+        "execution_tp_numbers"
+    )
+
+    errors = signal.get(
+        "validation_errors",
+        []
+    )
+
+    timestamp = signal.get(
+        "timestamp"
+    )
+
+    if timestamp:
+
+        timestamp_text = timestamp.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+    else:
+
+        timestamp_text = (
+            datetime.now(
+                TIMEZONE
+            ).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        )
 
     lines = [
+
         "🔴 SIGNAL REJECTED",
+
         "────────────────────",
+
         f"📺 Channel: {channel_name}",
+
     ]
 
     if direction:
-        lines.append(f"🎯 Direction: {direction}")
 
-    if entry_low is not None and entry_high is not None:
         lines.append(
-            f"💰 Entry: {entry_low} - {entry_high}"
+            f"🎯 Direction: {direction}"
         )
 
-    if sl is not None:
-        lines.append(f"🛑 SL: {sl}")
+    if (
+        entry_low is not None
+        and entry_high is not None
+    ):
+
+        if entry_low == entry_high:
+
+            lines.append(
+                f"💰 Entry: "
+                f"{entry_low:.2f}"
+            )
+
+        else:
+
+            lines.append(
+                f"💰 Entry: "
+                f"{entry_low:.2f} - "
+                f"{entry_high:.2f}"
+            )
+
+    else:
+
+        lines.append(
+            "💰 Entry: NOT FOUND"
+        )
+
+    if stoploss is not None:
+
+        lines.append(
+            f"🛑 SL: {stoploss:.2f}"
+        )
+
+    else:
+
+        lines.append(
+            "🛑 SL: NOT FOUND"
+        )
 
     # --------------------------------------------------------
-    # REQUIRED EXECUTION TPs
+    # ALL DETECTED TPs
     # --------------------------------------------------------
 
-    if execution_tps:
-        tp_a, tp_b = execution_tps
+    for tp_number in sorted(
+        tp_levels
+    ):
 
-        lines.extend([
-            "",
-            "📌 Required execution TPs:",
-            f"TP{tp_a}: {tp_levels.get(tp_a)}",
-            f"TP{tp_b}: {tp_levels.get(tp_b)}",
-        ])
+        lines.append(
+            f"🎯 TP{tp_number}: "
+            f"{tp_levels[tp_number]:.2f}"
+        )
+
+    # --------------------------------------------------------
+    # EXECUTION MAPPING
+    # --------------------------------------------------------
+
+    lines.append("")
+
+    if mapping:
+
+        lines.append(
+            f"📌 Required execution TPs: "
+            f"TP{mapping[0]} + TP{mapping[1]}"
+        )
+
+    else:
+
+        lines.append(
+            "📌 Required execution TPs: "
+            "NO MAPPING"
+        )
+
+    # --------------------------------------------------------
+    # REJECTION REASONS
+    # --------------------------------------------------------
 
     lines.extend([
+
         "",
-        "❌ REASON:",
-        f"• {result.get('reason')}",
-        "",
-        "Raw message:",
-        raw_text,
+
+        "❌ REJECTION REASONS",
+
     ])
 
-    return "\n".join(lines)
+    if errors:
+
+        for error in errors:
+
+            lines.append(
+                f"• {error}"
+            )
+
+    else:
+
+        reason = signal.get(
+            "reason"
+        )
+
+        lines.append(
+            f"• {reason or 'Signal rejected'}"
+        )
+
+    # --------------------------------------------------------
+    # RAW MESSAGE
+    # --------------------------------------------------------
+
+    lines.extend([
+
+        "",
+
+        "📝 RAW MESSAGE",
+
+        "────────────────────",
+
+        raw_text,
+
+        "",
+
+        f"🕒 Timestamp: "
+        f"{timestamp_text}",
+
+        "────────────────────",
+
+        "⚠️ No trade was executed.",
+
+    ])
+
+    return "\n".join(
+        lines
+    )
 
 
 # ============================================================
-# CREATE TELEGRAM CLIENT
+# TELEGRAM CLIENT
 # ============================================================
 
 def create_telegram_client():
-    """
-    Create TelegramClient.
 
-    Priority:
-        1. TELEGRAM_SESSION_STRING
-        2. Local .session file
-
-    Render:
-        Uses StringSession.
-
-    Local:
-        Falls back to gold_signal_bot.session.
-    """
+    # --------------------------------------------------------
+    # RENDER AUTHENTICATION
+    # --------------------------------------------------------
 
     if SESSION_STRING:
-        print("🔐 Using TELEGRAM_SESSION_STRING")
+
+        print(
+            "🔐 Using TELEGRAM_SESSION_STRING"
+        )
+
         return TelegramClient(
-            StringSession(SESSION_STRING),
+            StringSession(
+                SESSION_STRING
+            ),
             API_ID,
             API_HASH
         )
 
+    # --------------------------------------------------------
+    # LOCAL AUTHENTICATION
+    # --------------------------------------------------------
+
     print(
-        f"🔐 TELEGRAM_SESSION_STRING not found. "
-        f"Using local session: {LOCAL_SESSION_NAME}.session"
+        "🔐 Using local Telegram session:"
+        f" {LOCAL_SESSION_NAME}"
     )
 
     return TelegramClient(
@@ -692,237 +1610,420 @@ def create_telegram_client():
 
 
 # ============================================================
-# TELEGRAM CLIENT
+# RESOLVE SOURCE CHANNELS
 # ============================================================
 
-client = create_telegram_client()
+async def resolve_source_channels(
+    client
+):
 
-
-# ============================================================
-# RESOLVE AND VERIFY SOURCE CHANNELS
-# ============================================================
-
-async def resolve_sources():
-    """
-    Resolve all configured source channels and verify access.
-    """
-
-    print("\n" + "=" * 70)
-    print("🔎 VERIFYING TELEGRAM SOURCE CHANNELS")
+    print()
     print("=" * 70)
+    print(
+        "🔎 VERIFYING TELEGRAM SOURCE CHANNELS"
+    )
+    print("=" * 70)
+
+    resolved_channels = []
 
     accessible = []
 
+    failed = []
+
+    # --------------------------------------------------------
+    # CHECK EACH SOURCE
+    # --------------------------------------------------------
+
     for channel_id in SOURCE_CHANNELS:
 
+        print()
+
+        print(
+            f"Checking channel ID: "
+            f"{channel_id}"
+        )
+
         try:
-            entity = await client.get_entity(channel_id)
 
-            entity_id = utils.get_peer_id(entity)
+            entity = await client.get_entity(
+                channel_id
+            )
 
-            # get_peer_id should produce the signed -100... ID
-            signed_id = int(entity_id)
+            # Convert entity to Telegram peer ID
+            resolved_id = utils.get_peer_id(
+                entity
+            )
 
-            channel_name = getattr(
+            title = getattr(
                 entity,
                 "title",
                 None
-            ) or getattr(
+            )
+
+            username = getattr(
                 entity,
-                "first_name",
+                "username",
                 None
-            ) or "Unknown"
+            )
 
             mapping = get_tp_mapping(
-                channel_id=signed_id,
-                channel_name=channel_name
+                channel_id=channel_id,
+                channel_name=title
             )
 
-            print(f"\n📺 {channel_name}")
-            print(f"   ID: {signed_id}")
+            display_name = (
+                title
+                or CHANNEL_DISPLAY_NAMES.get(
+                    channel_id,
+                    str(channel_id)
+                )
+            )
+
+            print(
+                f"  ✅ {display_name}"
+            )
+
+            print(
+                f"     ID: {resolved_id}"
+            )
+
+            if username:
+
+                print(
+                    f"     Username: "
+                    f"@{username}"
+                )
 
             if mapping:
+
                 print(
-                    f"   Execution TPs: "
-                    f"TP{mapping[0]} + TP{mapping[1]}"
+                    f"     TP Mapping: "
+                    f"TP{mapping[0]} + "
+                    f"TP{mapping[1]}"
                 )
+
             else:
-                print("   ⚠️ NO TP MAPPING")
+
+                print(
+                    "     TP Mapping: NONE"
+                )
 
             accessible.append(
-                {
-                    "id": signed_id,
-                    "name": channel_name,
-                    "mapping": mapping,
-                }
+                channel_id
             )
 
-        except Exception as e:
+            resolved_channels.append(
+                entity
+            )
+
+        except Exception as exc:
+
             print(
-                f"\n❌ Could not access channel "
-                f"{channel_id}: {e}"
+                f"  ❌ FAILED: "
+                f"{channel_id}"
             )
 
-    print("\n" + "-" * 70)
+            print(
+                f"     Reason: {exc}"
+            )
+
+            failed.append(
+                channel_id
+            )
+
+    # --------------------------------------------------------
+    # SUMMARY
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 70)
+
     print(
         f"Accessible sources: "
         f"{len(accessible)}/{len(SOURCE_CHANNELS)}"
     )
-    print("-" * 70)
 
-    return accessible
+    if failed:
+
+        print(
+            f"❌ Failed sources: "
+            f"{len(failed)}"
+        )
+
+        for channel_id in failed:
+
+            print(
+                f"   • {channel_id}"
+            )
+
+    else:
+
+        print(
+            "✅ ALL SOURCE CHANNELS ACCESSIBLE"
+        )
+
+    print("=" * 70)
+
+    return resolved_channels
 
 
 # ============================================================
-# HANDLE NEW TELEGRAM MESSAGE
+# VERIFY TP MAPPINGS
 # ============================================================
 
-@client.on(events.NewMessage(chats=SOURCE_CHANNELS))
-async def handle_message(event):
-    """
-    Process every new message received from a monitored channel.
-    """
+def print_tp_mappings():
+
+    print()
+    print("=" * 70)
+    print(
+        "📌 EXECUTION TP MAPPINGS"
+    )
+    print("=" * 70)
+
+    for channel_id in SOURCE_CHANNELS:
+
+        mapping = TP_MAPPING.get(
+            channel_id
+        )
+
+        name = CHANNEL_DISPLAY_NAMES.get(
+            channel_id,
+            str(channel_id)
+        )
+
+        if mapping:
+
+            print(
+                f"  • {name}"
+            )
+
+            print(
+                f"    {channel_id}"
+                f" → TP{mapping[0]}"
+                f" + TP{mapping[1]}"
+            )
+
+        else:
+
+            print(
+                f"  • {name}"
+                f" → NO MAPPING"
+            )
+
+    print("=" * 70)
+
+
+# ============================================================
+# VERIFY OUTPUT CHANNEL
+# ============================================================
+
+async def verify_output_channel(
+    client
+):
+
+    print()
+    print("=" * 70)
+    print(
+        "📤 VERIFYING OUTPUT CHANNEL"
+    )
+    print("=" * 70)
 
     try:
 
-        message = event.message
-        raw_text = message.message or ""
+        output_entity = await client.get_entity(
+            TEST_OUTPUT_CHANNEL_ID
+        )
+
+        output_name = getattr(
+            output_entity,
+            "title",
+            None
+        )
+
+        output_peer_id = utils.get_peer_id(
+            output_entity
+        )
+
+        print(
+            f"✅ Output channel accessible: "
+            f"{output_name}"
+        )
+
+        print(
+            f"   ID: {output_peer_id}"
+        )
+
+        return output_entity
+
+    except Exception as exc:
+
+        print(
+            "❌ OUTPUT CHANNEL IS NOT ACCESSIBLE"
+        )
+
+        print(
+            f"   Channel ID: "
+            f"{TEST_OUTPUT_CHANNEL_ID}"
+        )
+
+        print(
+            f"   Reason: {exc}"
+        )
+
+        raise
+
+
+# ============================================================
+# MESSAGE HANDLER
+# ============================================================
+
+async def process_message(
+    client,
+    event
+):
+
+    try:
 
         # ----------------------------------------------------
-        # GET CHANNEL INFORMATION
+        # GET RAW MESSAGE
+        # ----------------------------------------------------
+
+        raw_text = event.raw_text or ""
+
+        if not raw_text.strip():
+
+            print(
+                "\n⚠️ Empty Telegram message ignored."
+            )
+
+            return
+
+        # ----------------------------------------------------
+        # GET SOURCE ENTITY
         # ----------------------------------------------------
 
         chat = await event.get_chat()
 
-        channel_name = (
-            getattr(chat, "title", None)
-            or getattr(chat, "first_name", None)
-            or "Unknown"
+        channel_name = getattr(
+            chat,
+            "title",
+            None
         )
 
-        entity_id = utils.get_peer_id(chat)
+        if not channel_name:
 
-        # Ensure the signed Telegram channel ID
-        channel_id = int(entity_id)
-
-        # ----------------------------------------------------
-        # TIMESTAMP
-        # ----------------------------------------------------
-
-        tz = pytz.timezone("Africa/Harare")
-
-        if message.date:
-            timestamp = message.date.astimezone(tz).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-        else:
-            timestamp = datetime.now(tz).strftime(
-                "%Y-%m-%d %H:%M:%S"
+            channel_name = str(
+                event.chat_id
             )
 
         # ----------------------------------------------------
-        # PRINT RAW MESSAGE
+        # TELEGRAM PEER ID
         # ----------------------------------------------------
 
-        print("\n" + "=" * 70)
-        print("📨 NEW MESSAGE")
-        print("=" * 70)
-        print(f"Time: {timestamp}")
-        print(f"Channel: {channel_name}")
-        print(f"Channel ID: {channel_id}")
-        print(f"Message ID: {message.id}")
-
-        print("\nRAW MESSAGE:")
-        print("-" * 70)
-        print(raw_text)
-        print("-" * 70)
-
-        # ----------------------------------------------------
-        # SHOW TP MAPPING
-        # ----------------------------------------------------
-
-        mapping = get_tp_mapping(
-            channel_id=channel_id,
-            channel_name=channel_name
+        channel_id = utils.get_peer_id(
+            chat
         )
 
-        if mapping:
-            print(
-                f"\nExecution TP mapping: "
-                f"TP{mapping[0]} + TP{mapping[1]}"
+        # ----------------------------------------------------
+        # NORMALIZE SOURCE ID
+        # ----------------------------------------------------
+
+        try:
+
+            channel_id = int(
+                channel_id
             )
-        else:
-            print("\n⚠️ No execution TP mapping found")
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            channel_id = event.chat_id
 
         # ----------------------------------------------------
         # PARSE
         # ----------------------------------------------------
 
         result = parse_signal(
-            raw_text,
-            channel_id=channel_id,
-            channel_name=channel_name
+            message=raw_text,
+            channel_name=channel_name,
+            channel_id=channel_id
+        )
+
+        # ----------------------------------------------------
+        # PRINT PROCESSING LOG
+        # ----------------------------------------------------
+
+        print()
+        print("=" * 70)
+
+        print(
+            "📥 NEW TELEGRAM MESSAGE"
+        )
+
+        print(
+            f"📺 Channel: {channel_name}"
+        )
+
+        print(
+            f"🆔 Channel ID: {channel_id}"
+        )
+
+        print(
+            f"📝 Message ID: "
+            f"{event.id}"
+        )
+
+        print(
+            f"🎯 Direction: "
+            f"{result.get('direction')}"
+        )
+
+        print(
+            f"💰 Entry: "
+            f"{result.get('entry_low')} - "
+            f"{result.get('entry_high')}"
+        )
+
+        print(
+            f"🛑 SL: "
+            f"{result.get('stoploss')}"
+        )
+
+        print(
+            f"🎯 TPs: "
+            f"{result.get('tp_levels')}"
+        )
+
+        print(
+            f"📌 Execution TPs: "
+            f"{result.get('execution_tps')}"
         )
 
         # ----------------------------------------------------
         # VALID SIGNAL
         # ----------------------------------------------------
 
-        if result["valid"]:
-
-            print("\n🟢 SIGNAL PARSED SUCCESSFULLY")
+        if result.get("valid"):
 
             print(
-                f"Direction: {result['direction']}"
+                "✅ SIGNAL VALID"
             )
 
-            print(
-                f"Entry: "
-                f"{result['entry_low']} - "
-                f"{result['entry_high']}"
+            output = format_parsed_signal(
+                result
             )
 
-            print(
-                f"SL: {result['sl']}"
-            )
-
-            print(
-                f"All TPs: {result['tp_levels']}"
-            )
-
-            print(
-                f"Execution TPs: "
-                f"TP{result['execution_tps'][0]} + "
-                f"TP{result['execution_tps'][1]}"
-            )
-
-            print(
-                f"Execution prices: "
-                f"{result['execution_price_1']} + "
-                f"{result['execution_price_2']}"
-            )
-
-            # ------------------------------------------------
-            # FORMAT OUTPUT
-            # ------------------------------------------------
-
-            output_message = format_parsed_signal(
-                result=result,
-                channel_name=channel_name,
-                timestamp=timestamp
-            )
-
-            # ------------------------------------------------
-            # SEND TO PRIVATE QUEUE
-            # ------------------------------------------------
-
+            # Send parsed signal
             await client.send_message(
                 TEST_OUTPUT_CHANNEL_ID,
-                output_message
+                output
             )
 
             print(
-                "\n✅ Parsed signal sent to Guns' Goldbot"
+                "📤 Parsed signal sent to "
+                "Guns' Goldbot"
             )
 
         # ----------------------------------------------------
@@ -931,15 +2032,26 @@ async def handle_message(event):
 
         else:
 
-            print("\n🔴 MESSAGE REJECTED BY PARSER")
             print(
-                f"   ❌ {result['reason']}"
+                "❌ SIGNAL REJECTED"
             )
 
-            rejection_message = format_rejected_signal(
-                result=result,
-                channel_name=channel_name,
-                raw_text=raw_text
+            errors = result.get(
+                "validation_errors",
+                []
+            )
+
+            for error in errors:
+
+                print(
+                    f"   • {error}"
+                )
+
+            rejection_message = (
+                format_rejected_signal(
+                    signal=result,
+                    raw_text=raw_text
+                )
             )
 
             await client.send_message(
@@ -948,18 +2060,30 @@ async def handle_message(event):
             )
 
             print(
-                "\n📤 Rejection report sent to Guns' Goldbot"
+                "📤 Rejection report sent to "
+                "Guns' Goldbot"
             )
 
-    except Exception as e:
-
-        print("\n" + "=" * 70)
-        print("🔥 ERROR PROCESSING MESSAGE")
         print("=" * 70)
-        print(str(e))
 
-        # Do not allow one bad message to kill the listener.
-        return
+    except Exception as exc:
+
+        # ----------------------------------------------------
+        # NEVER LET ONE MESSAGE KILL LISTENER
+        # ----------------------------------------------------
+
+        print()
+        print(
+            "❌ ERROR PROCESSING TELEGRAM MESSAGE"
+        )
+
+        print(
+            f"Reason: {exc}"
+        )
+
+        print(
+            "Listener remains active."
+        )
 
 
 # ============================================================
@@ -968,125 +2092,442 @@ async def handle_message(event):
 
 async def main():
 
-    print("\n" + "=" * 70)
-    print("🚀 PHASE 4 — LIVE TELEGRAM GOLD SIGNAL PARSER")
+    print()
+    print("=" * 70)
+    print(
+        "🚀 PHASE 4 — LIVE TELEGRAM GOLD SIGNAL PARSER"
+    )
     print("=" * 70)
 
-    print("\n⚠️ NO TRADING IS ENABLED")
-    print("⚠️ NO METAAPI IS CONNECTED")
-    print("⚠️ NO MT5 ORDERS CAN BE PLACED")
+    print()
+    print(
+        "⚠️ NO TRADING IS ENABLED"
+    )
 
-    print("\nConfigured source channels:")
+    print(
+        "⚠️ NO METAAPI IS CONNECTED"
+    )
+
+    print(
+        "⚠️ NO MT5 ORDERS CAN BE PLACED"
+    )
+
+    print()
+    print(
+        "Purpose:"
+    )
+
+    print(
+        "Telegram → Parse → Validate → "
+        "Guns' Goldbot"
+    )
+
+    print("=" * 70)
+
+    # --------------------------------------------------------
+    # CREATE CLIENT
+    # --------------------------------------------------------
+
+    client = create_telegram_client()
+
+    # --------------------------------------------------------
+    # CONNECT
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "Connecting to Telegram..."
+    )
+
+    try:
+
+        # Do not use interactive login on Render.
+        #
+        # The StringSession must already be authorized.
+
+        await client.connect()
+
+    except Exception as exc:
+
+        print()
+        print(
+            "❌ TELEGRAM CONNECTION FAILED"
+        )
+
+        print(
+            f"Reason: {exc}"
+        )
+
+        raise
+
+    # --------------------------------------------------------
+    # AUTHORIZATION CHECK
+    # --------------------------------------------------------
+
+    if not await client.is_user_authorized():
+
+        print()
+        print(
+            "❌ TELEGRAM SESSION IS NOT AUTHORIZED"
+        )
+
+        print(
+            "The TELEGRAM_SESSION_STRING "
+            "is invalid or expired."
+        )
+
+        await client.disconnect()
+
+        return
+
+    print()
+    print(
+        "✅ TELEGRAM SESSION AUTHORIZED"
+    )
+
+    # --------------------------------------------------------
+    # ACCOUNT INFORMATION
+    # --------------------------------------------------------
+
+    try:
+
+        me = await client.get_me()
+
+        if me:
+
+            first_name = (
+                getattr(
+                    me,
+                    "first_name",
+                    ""
+                )
+                or ""
+            )
+
+            last_name = (
+                getattr(
+                    me,
+                    "last_name",
+                    ""
+                )
+                or ""
+            )
+
+            phone = (
+                getattr(
+                    me,
+                    "phone",
+                    None
+                )
+            )
+
+            full_name = (
+                f"{first_name} "
+                f"{last_name}"
+            ).strip()
+
+            print()
+            print(
+                "👤 Telegram account:"
+            )
+
+            print(
+                f"   Name: "
+                f"{full_name or 'Unknown'}"
+            )
+
+            if phone:
+
+                print(
+                    f"   Phone: "
+                    f"{phone}"
+                )
+
+    except Exception as exc:
+
+        print(
+            f"⚠️ Could not read account info: "
+            f"{exc}"
+        )
+
+    # --------------------------------------------------------
+    # SHOW CONFIGURED CHANNELS
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 70)
+
+    print(
+        "📡 CONFIGURED SOURCE CHANNELS"
+    )
+
+    print("=" * 70)
 
     for channel_id in SOURCE_CHANNELS:
 
-        mapping = TP_MAPPING.get(channel_id)
+        name = CHANNEL_DISPLAY_NAMES.get(
+            channel_id,
+            str(channel_id)
+        )
+
+        mapping = TP_MAPPING.get(
+            channel_id
+        )
 
         if mapping:
+
             print(
-                f"  • {channel_id} "
-                f"→ TP{mapping[0]} + TP{mapping[1]}"
-            )
-        else:
-            print(
-                f"  • {channel_id} "
-                f"→ NO MAPPING"
+                f"  • {name}"
             )
 
-    print(
-        f"\nOutput channel: "
-        f"{TEST_OUTPUT_CHANNEL_ID}"
+            print(
+                f"    ID: {channel_id}"
+            )
+
+            print(
+                f"    Execution: "
+                f"TP{mapping[0]} + "
+                f"TP{mapping[1]}"
+            )
+
+        else:
+
+            print(
+                f"  • {name}"
+            )
+
+            print(
+                f"    ID: {channel_id}"
+            )
+
+            print(
+                "    Execution: NO MAPPING"
+            )
+
+    print("=" * 70)
+
+    # --------------------------------------------------------
+    # TP MAPPINGS
+    # --------------------------------------------------------
+
+    print_tp_mappings()
+
+    # --------------------------------------------------------
+    # RESOLVE SOURCES
+    # --------------------------------------------------------
+
+    resolved_channels = (
+        await resolve_source_channels(
+            client
+        )
     )
 
-    print("\nConnecting to Telegram...")
-
-    await client.start()
-
-    print("✅ TELEGRAM SESSION AUTHORIZED")
-
     # --------------------------------------------------------
-    # VERIFY SOURCES
+    # REQUIRE ALL 6 SOURCES
     # --------------------------------------------------------
 
-    accessible_sources = await resolve_sources()
+    if len(
+        resolved_channels
+    ) != len(
+        SOURCE_CHANNELS
+    ):
 
-    if len(accessible_sources) != len(SOURCE_CHANNELS):
+        print()
+        print(
+            "❌ NOT ALL SOURCE CHANNELS "
+            "ARE ACCESSIBLE."
+        )
 
         print(
-            "\n⚠️ WARNING: Not all configured "
-            "sources are accessible."
+            f"Accessible: "
+            f"{len(resolved_channels)}/"
+            f"{len(SOURCE_CHANNELS)}"
         )
+
+        print()
+        print(
+            "Parser will NOT start."
+        )
+
+        print(
+            "Fix Telegram access before "
+            "continuing."
+        )
+
+        await client.disconnect()
+
+        return
 
     # --------------------------------------------------------
     # VERIFY OUTPUT CHANNEL
     # --------------------------------------------------------
 
-    try:
-
-        output_entity = await client.get_entity(
-            TEST_OUTPUT_CHANNEL_ID
-        )
-
-        output_name = (
-            getattr(output_entity, "title", None)
-            or "Unknown"
-        )
-
-        print(
-            f"\n📤 Output channel accessible: "
-            f"{output_name}"
-        )
-
-    except Exception as e:
-
-        print(
-            "\n❌ Could not access output channel:"
-        )
-        print(str(e))
+    await verify_output_channel(
+        client
+    )
 
     # --------------------------------------------------------
-    # LISTENER
+    # FINAL CONFIGURATION SUMMARY
     # --------------------------------------------------------
 
-    print("\n" + "=" * 70)
-    print("LIVE PARSER LISTENER ACTIVE")
+    print()
     print("=" * 70)
 
-    print("\nMonitoring:")
+    print(
+        "✅ TELEGRAM CONFIGURATION VERIFIED"
+    )
 
-    for source in accessible_sources:
-        mapping = source["mapping"]
+    print(
+        f"✅ Source channels: "
+        f"{len(resolved_channels)}/"
+        f"{len(SOURCE_CHANNELS)}"
+    )
+
+    print(
+        "✅ Output channel accessible"
+    )
+
+    print(
+        "✅ TP mappings loaded"
+    )
+
+    print(
+        "✅ Signal parser loaded"
+    )
+
+    print(
+        "✅ Signal validation loaded"
+    )
+
+    print(
+        "✅ Rejection reporting loaded"
+    )
+
+    print(
+        "✅ No trading functionality enabled"
+    )
+
+    print("=" * 70)
+
+    # --------------------------------------------------------
+    # REGISTER MESSAGE HANDLER
+    # --------------------------------------------------------
+
+    @client.on(
+        events.NewMessage(
+            chats=resolved_channels
+        )
+    )
+    async def new_message_handler(
+        event
+    ):
+
+        await process_message(
+            client,
+            event
+        )
+
+    # --------------------------------------------------------
+    # LIVE LISTENER
+    # --------------------------------------------------------
+
+    print()
+    print("=" * 70)
+
+    print(
+        "🟢 LIVE PARSER LISTENER ACTIVE"
+    )
+
+    print("=" * 70)
+
+    print()
+
+    print(
+        "Monitoring:"
+    )
+
+    for channel_id in SOURCE_CHANNELS:
+
+        name = CHANNEL_DISPLAY_NAMES.get(
+            channel_id,
+            str(channel_id)
+        )
+
+        mapping = TP_MAPPING.get(
+            channel_id
+        )
 
         if mapping:
+
             print(
-                f"  • {source['name']} "
-                f"({source['id']}) "
-                f"→ TP{mapping[0]} + TP{mapping[1]}"
+                f"  • {name}"
+                f" → TP{mapping[0]}"
+                f" + TP{mapping[1]}"
             )
+
         else:
+
             print(
-                f"  • {source['name']} "
-                f"({source['id']}) "
-                f"→ NO MAPPING"
+                f"  • {name}"
+                f" → NO MAPPING"
             )
 
-    print("\nOutput:")
-    print("  • Guns' Goldbot")
+    print()
 
-    print("\n⚠️ NO TRADING IS ENABLED")
-    print("⚠️ NO METAAPI IS CONNECTED")
-    print("⚠️ NO MT5 ORDERS CAN BE PLACED")
+    print(
+        "📤 Output:"
+    )
 
-    print("\nOnly the mapped execution TPs are validated.")
+    print(
+        "   Guns' Goldbot"
+    )
 
-    print("\nWaiting for Telegram signals...")
-    print("\nPress CTRL+C to stop.")
+    print(
+        f"   ID: "
+        f"{TEST_OUTPUT_CHANNEL_ID}"
+    )
+
+    print()
+
+    print(
+        "Waiting for Telegram signals..."
+    )
+
+    print("=" * 70)
 
     # --------------------------------------------------------
-    # KEEP PROCESS ALIVE
+    # KEEP RUNNING
     # --------------------------------------------------------
 
-    await client.run_until_disconnected()
+    try:
+
+        await client.run_until_disconnected()
+
+    except KeyboardInterrupt:
+
+        print()
+        print(
+            "🛑 Parser stopped manually."
+        )
+
+    except Exception as exc:
+
+        print()
+        print(
+            "❌ Telegram listener stopped:"
+        )
+
+        print(
+            f"{exc}"
+        )
+
+        raise
+
+    finally:
+
+        if client.is_connected():
+
+            await client.disconnect()
 
 
 # ============================================================
@@ -1096,17 +2537,27 @@ async def main():
 if __name__ == "__main__":
 
     try:
-        asyncio.run(main())
+
+        asyncio.run(
+            main()
+        )
 
     except KeyboardInterrupt:
 
-        print("\n")
-        print("🛑 Parser stopped by user.")
+        print()
+        print(
+            "🛑 PHASE 4 PARSER STOPPED."
+        )
 
-    except Exception as e:
+    except Exception as exc:
 
-        print("\n")
-        print("=" * 70)
-        print("🔥 PARSER STOPPED DUE TO ERROR")
-        print("=" * 70)
-        print(str(e))
+        print()
+        print(
+            "❌ PHASE 4 PARSER FAILED."
+        )
+
+        print(
+            f"Reason: {exc}"
+        )
+
+        raise
