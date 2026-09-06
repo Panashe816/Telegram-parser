@@ -1,10 +1,11 @@
 import asyncio
+import os
 import re
 from datetime import datetime
 
 import pytz
+from dotenv import load_dotenv
 from telethon import TelegramClient, events
-from telethon.errors import UsernameInvalidError, UsernameNotOccupiedError
 
 
 # ============================================================
@@ -26,104 +27,154 @@ from telethon.errors import UsernameInvalidError, UsernameNotOccupiedError
 #
 # PHASE 6 handles DEMO trade execution.
 #
+#
 # EXECUTION TP MAPPING
 #
 #   Gold Signal VIP              TP3 + TP6
 #   Gold Hunter Trade             TP3 + TP4
 #   Gold Signals 98% Sure         TP3 + TP4
-#   Gold VIP Signals Insights     TP3 + TP6
+#   Scalping Market Trading       TP4 + TP7
+#   Smart Money Trader            TP4 + TP6
 #   GUNS THE TRADER               TP3 + TP4
+#
 #
 # IMPORTANT VALIDATION RULE:
 #
 #   Only the two TPs that Phase 6 will actually execute
 #   are used for TP validation.
 #
-#   Example:
-#
-#       SELL 4620/4633
-#
-#       TP1 4630
-#       TP2 4624
-#       TP3 4610
-#       TP4 4605
-#
-#       SL 4660
-#
-#   TP1 and TP2 are inside the entry range, but they are
-#   NOT being executed for GUNS THE TRADER.
-#
-#   TP3 and TP4 are below the SELL entry range, therefore
-#   the signal is valid.
-#
 # ============================================================
+
+
+# ============================================================
+# LOAD ENVIRONMENT VARIABLES
+# ============================================================
+
+load_dotenv()
 
 
 # ============================================================
 # TELEGRAM CONFIGURATION
 # ============================================================
 
-API_ID = 14424659
+API_ID = int(
+    os.getenv(
+        "TELEGRAM_API_ID",
+        "14424659"
+    )
+)
 
-API_HASH = "5facb0b7b7a6f141da79d9cc460d4e12"
+API_HASH = os.getenv(
+    "TELEGRAM_API_HASH"
+)
 
-SESSION_NAME = "gold_signal_bot"
+SESSION_NAME = os.getenv(
+    "TELEGRAM_LOCAL_SESSION",
+    "gold_signal_bot"
+)
+
+if not API_HASH:
+
+    raise RuntimeError(
+        "TELEGRAM_API_HASH is missing from .env"
+    )
 
 
 # ============================================================
 # SOURCE CHANNELS
 # ============================================================
+#
+# FIVE REAL SIGNAL SOURCES
+# PLUS GUNS THE TRADER AS A TEST SOURCE.
+#
+# IMPORTANT:
+#   Numeric Telegram IDs are used instead of usernames.
+#
+# ============================================================
 
 SOURCE_CHANNELS = [
 
+    # --------------------------------------------------------
     # REAL SIGNAL SOURCES
-    "Goldhunterlearnttade3867",
-    "GoldSignalVip110",
-    "MrHenrys122",
-    "AGoldvip_0786",
+    # --------------------------------------------------------
 
-    # YOUR TEST SOURCE
-    -1003170522699,
+    -1001920682501,      # Gold Signals 98% Sure
+
+    -1002000548854,      # Gold Hunter Trade
+
+    -1001859361786,      # Gold Signal VIP
+
+    -1001392009006,      # Scalping Market Trading
+
+    -1001509147302,      # Smart Money Trader
+
+
+    # --------------------------------------------------------
+    # TEST SOURCE
+    # --------------------------------------------------------
+
+    -1003170522699,      # GUNS THE TRADER
+
 ]
+
+
+# ============================================================
+# CHANNEL -> EXECUTION TP MAPPING
+# ============================================================
+#
+# Mapping is based on Telegram channel ID.
+#
+# This is more reliable than using channel names because
+# Telegram channel titles may contain:
+#
+#   - emojis
+#   - bold Unicode characters
+#   - special characters
+#   - changed formatting
+#
+# ============================================================
+
+TP_MAPPING = {
+
+    # Gold Signals 98% Sure
+    -1001920682501: (3, 4),
+
+    # Gold Hunter Trade
+    -1002000548854: (3, 4),
+
+    # Gold Signal VIP
+    -1001859361786: (3, 6),
+
+    # Scalping Market Trading
+    -1001392009006: (4, 7),
+
+    # Smart Money Trader
+    -1001509147302: (4, 6),
+
+    # GUNS THE TRADER - TEST SOURCE
+    -1003170522699: (3, 4),
+}
 
 
 # ============================================================
 # TEST OUTPUT CHANNEL
 # ============================================================
 
-TEST_OUTPUT_CHANNEL_ID = -1002933896146
+TEST_OUTPUT_CHANNEL_ID = int(
+    os.getenv(
+        "TELEGRAM_CHANNEL_ID",
+        "-1002933896146"
+    )
+)
 
 
 # ============================================================
 # TIMEZONE
 # ============================================================
 
-TIMEZONE = pytz.timezone("Africa/Harare")
-
-
-# ============================================================
-# SOURCE -> EXECUTION TP MAPPING
-# ============================================================
-#
-# These are the SAME mappings used by Phase 6.
-#
-# The parser validates these TPs specifically.
-#
-# ============================================================
-
-TP_MAPPING = {
-
-    "GOLD SIGNAL VIP": (3, 6),
-
-    "GOLD HUNTER TRADE": (3, 4),
-
-    "GOLD SIGNALS 98% SURE": (3, 4),
-
-    "GOLD VIP SIGNALS INSIGHTS": (3, 6),
-
-    # Private testing channel
-    "GUNS THE TRADER": (3, 4),
-}
+TIMEZONE = pytz.timezone(
+    "Africa/Harare"
+)
 
 
 # ============================================================
@@ -137,9 +188,15 @@ def normalize_text(text):
 
     text = str(text)
 
-    text = text.replace("\r", "\n")
+    text = text.replace(
+        "\r",
+        "\n"
+    )
 
-    text = text.replace("\u00A0", " ")
+    text = text.replace(
+        "\u00A0",
+        " "
+    )
 
     # Normalize common Unicode dashes
     text = (
@@ -170,7 +227,6 @@ def normalize_channel_name(name):
 
     name = str(name).upper()
 
-    # Remove common Telegram bold Unicode characters
     replacements = {
 
         "𝗚𝗢𝗟𝗗": "GOLD",
@@ -203,6 +259,20 @@ def normalize_channel_name(name):
         "𝗧𝗥𝗔𝗗𝗘𝗥": "TRADER",
         "𝐓𝐑𝐀𝐃𝐄𝐑": "TRADER",
 
+        "𝗦𝗖𝗔𝗟𝗣𝗜𝗡𝗚": "SCALPING",
+        "𝐒𝐂𝐀𝐋𝐏𝐈𝐍𝐆": "SCALPING",
+
+        "𝗠𝗔𝗥𝗞𝗘𝗧": "MARKET",
+        "𝐌𝐀𝐑𝐊𝐄𝐓": "MARKET",
+
+        "𝗦𝗠𝗔𝗥𝗧": "SMART",
+        "𝐒𝐌𝐀𝐑𝐓": "SMART",
+
+        "𝗠𝗢𝗡𝗘𝗬": "MONEY",
+        "𝐌𝐎𝐍𝐄𝐘": "MONEY",
+
+        "®": "",
+
         "😎": "",
     }
 
@@ -224,23 +294,48 @@ def normalize_channel_name(name):
 # FIND TP MAPPING
 # ============================================================
 
-def get_tp_mapping(channel_name):
+def get_tp_mapping(
+    channel_id=None,
+    channel_name=None
+):
+
+    # --------------------------------------------------------
+    # PRIMARY METHOD:
+    # TELEGRAM CHANNEL ID
+    # --------------------------------------------------------
+
+    if channel_id is not None:
+
+        try:
+
+            channel_id = int(
+                channel_id
+            )
+
+            if channel_id in TP_MAPPING:
+
+                return TP_MAPPING[
+                    channel_id
+                ]
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            pass
+
+    # --------------------------------------------------------
+    # FALLBACK:
+    # CHANNEL NAME
+    #
+    # This keeps the parser compatible with the previous
+    # name-based behaviour if required.
+    # --------------------------------------------------------
 
     normalized = normalize_channel_name(
         channel_name
     )
-
-    # --------------------------------------------------------
-    # Direct match
-    # --------------------------------------------------------
-
-    if normalized in TP_MAPPING:
-
-        return TP_MAPPING[normalized]
-
-    # --------------------------------------------------------
-    # Flexible matching
-    # --------------------------------------------------------
 
     if (
         "GOLD" in normalized
@@ -277,6 +372,22 @@ def get_tp_mapping(channel_name):
 
         return (3, 4)
 
+    if (
+        "SCALPING" in normalized
+        and "MARKET" in normalized
+        and "TRADING" in normalized
+    ):
+
+        return (4, 7)
+
+    if (
+        "SMART" in normalized
+        and "MONEY" in normalized
+        and "TRADER" in normalized
+    ):
+
+        return (4, 6)
+
     return None
 
 
@@ -311,17 +422,6 @@ def extract_direction(text):
 
 def extract_entry(text):
 
-    # --------------------------------------------------------
-    # Entry ranges
-    #
-    # Examples:
-    #
-    # 4547/4544
-    # 4545_4542
-    # 4500-4510
-    # 4500 – 4510
-    # --------------------------------------------------------
-
     range_patterns = [
 
         r"\b(\d+(?:\.\d+)?)\s*[/_]\s*(\d+(?:\.\d+)?)\b",
@@ -351,10 +451,6 @@ def extract_entry(text):
                 max(a, b),
                 "RANGE"
             )
-
-    # --------------------------------------------------------
-    # Single entry
-    # --------------------------------------------------------
 
     single_patterns = [
 
@@ -541,7 +637,7 @@ def validate_execution_tps(
     )
 
     # --------------------------------------------------------
-    # Check that required execution TPs exist
+    # Required execution TPs
     # --------------------------------------------------------
 
     if execution_tp_1 is None:
@@ -564,13 +660,6 @@ def validate_execution_tps(
 
     # --------------------------------------------------------
     # BUY
-    #
-    # For BUY:
-    #
-    # SL < ENTRY < TP
-    #
-    # Both execution TPs must be ABOVE
-    # the entire entry range.
     # --------------------------------------------------------
 
     if direction == "BUY":
@@ -593,13 +682,6 @@ def validate_execution_tps(
 
     # --------------------------------------------------------
     # SELL
-    #
-    # For SELL:
-    #
-    # TP < ENTRY < SL
-    #
-    # Both execution TPs must be BELOW
-    # the entire entry range.
     # --------------------------------------------------------
 
     elif direction == "SELL":
@@ -631,7 +713,8 @@ def validate_signal(
     entry_high,
     stoploss,
     tp_levels,
-    channel_name
+    channel_name,
+    channel_id=None
 ):
 
     errors = []
@@ -707,7 +790,7 @@ def validate_signal(
         )
 
     # --------------------------------------------------------
-    # STOP LOSS validation
+    # STOP LOSS
     # --------------------------------------------------------
 
     if direction == "BUY":
@@ -729,10 +812,11 @@ def validate_signal(
             )
 
     # --------------------------------------------------------
-    # FIND SOURCE TP MAPPING
+    # SOURCE TP MAPPING
     # --------------------------------------------------------
 
     mapping = get_tp_mapping(
+        channel_id,
         channel_name
     )
 
@@ -749,7 +833,7 @@ def validate_signal(
         )
 
     # --------------------------------------------------------
-    # VALIDATE ONLY EXECUTION TPs
+    # VALIDATE EXECUTION TPs
     # --------------------------------------------------------
 
     validate_execution_tps(
@@ -773,7 +857,8 @@ def validate_signal(
 
 def parse_signal(
     message,
-    channel_name
+    channel_name,
+    channel_id=None
 ):
 
     message = normalize_text(
@@ -802,10 +887,12 @@ def parse_signal(
         entry_high,
         stoploss,
         tp_levels,
-        channel_name
+        channel_name,
+        channel_id
     )
 
     mapping = get_tp_mapping(
+        channel_id,
         channel_name
     )
 
@@ -832,6 +919,8 @@ def parse_signal(
     signal = {
 
         "channel": channel_name,
+
+        "channel_id": channel_id,
 
         "normalized_channel":
             normalize_channel_name(
@@ -863,10 +952,6 @@ def parse_signal(
         "tp6": tp_levels.get(6),
 
         "tp_levels": tp_levels,
-
-        # ----------------------------------------------------
-        # Execution mapping
-        # ----------------------------------------------------
 
         "execution_tp_numbers": (
             mapping
@@ -969,6 +1054,14 @@ def format_parsed_signal(signal):
 
         tp_a, tp_b = mapping
 
+        price_a = signal[
+            "tp_levels"
+        ].get(tp_a)
+
+        price_b = signal[
+            "tp_levels"
+        ].get(tp_b)
+
         lines.extend([
 
             "",
@@ -977,11 +1070,11 @@ def format_parsed_signal(signal):
 
             f"Position 1 → "
             f"TP{tp_a}: "
-            f"{signal['tp_levels'].get(tp_a):.2f}",
+            f"{price_a:.2f}",
 
             f"Position 2 → "
             f"TP{tp_b}: "
-            f"{signal['tp_levels'].get(tp_b):.2f}",
+            f"{price_b:.2f}",
         ])
 
     lines.extend([
@@ -1102,17 +1195,17 @@ async def resolve_sources():
     print("RESOLVING SOURCE CHANNELS")
     print("=" * 70)
 
-    for username in SOURCE_CHANNELS:
+    for channel_id in SOURCE_CHANNELS:
 
         print()
         print(
-            f"🔍 {username}"
+            f"🔍 {channel_id}"
         )
 
         try:
 
             entity = await client.get_entity(
-                username
+                channel_id
             )
 
             valid_sources.append(
@@ -1122,7 +1215,7 @@ async def resolve_sources():
             title = getattr(
                 entity,
                 "title",
-                username
+                str(channel_id)
             )
 
             entity_id = getattr(
@@ -1140,17 +1233,33 @@ async def resolve_sources():
             )
 
             print(
-                f"   ID: {entity_id}"
+                f"   ID: -100{entity_id}"
             )
 
-        except (
-            UsernameInvalidError,
-            UsernameNotOccupiedError,
-            ValueError
-        ) as e:
+            mapping = get_tp_mapping(
+                channel_id,
+                title
+            )
+
+            if mapping:
+
+                print(
+                    f"   Execution TPs: "
+                    f"TP{mapping[0]} + "
+                    f"TP{mapping[1]}"
+                )
+
+            else:
+
+                print(
+                    "   ⚠️ No TP mapping"
+                )
+
+        except Exception as e:
 
             print(
-                f"   ❌ NOT ACCESSIBLE: {e}"
+                f"   ❌ NOT ACCESSIBLE: "
+                f"{e}"
             )
 
     print()
@@ -1248,6 +1357,22 @@ async def handle_message(event):
             "Unknown"
         )
 
+        # ----------------------------------------------------
+        # GET ACTUAL TELEGRAM CHANNEL ID
+        # ----------------------------------------------------
+
+        channel_id = getattr(
+            chat,
+            "id",
+            None
+        )
+
+        if channel_id is not None:
+
+            channel_id = int(
+                f"-100{channel_id}"
+            )
+
         print()
         print("=" * 70)
         print("📨 NEW MESSAGE")
@@ -1261,6 +1386,11 @@ async def handle_message(event):
         print(
             f"Channel: "
             f"{channel_name}"
+        )
+
+        print(
+            f"Channel ID: "
+            f"{channel_id}"
         )
 
         print(
@@ -1283,6 +1413,7 @@ async def handle_message(event):
         # ----------------------------------------------------
 
         mapping = get_tp_mapping(
+            channel_id,
             channel_name
         )
 
@@ -1307,12 +1438,13 @@ async def handle_message(event):
 
         signal = parse_signal(
             message_text,
-            channel_name
+            channel_name,
+            channel_id
         )
 
         # ----------------------------------------------------
         # VALID SIGNAL
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         if signal["parse_success"]:
 
@@ -1491,13 +1623,14 @@ async def main():
     print("EXECUTION TP MAPPINGS")
     print("=" * 70)
 
-    for channel, mapping in (
+    for channel_id, mapping in (
         TP_MAPPING.items()
     ):
 
         print(
-            f"  • {channel}: "
-            f"TP{mapping[0]} + TP{mapping[1]}"
+            f"  • {channel_id}: "
+            f"TP{mapping[0]} + "
+            f"TP{mapping[1]}"
         )
 
     # --------------------------------------------------------
@@ -1524,6 +1657,8 @@ async def main():
         print(
             f"  • "
             f"{getattr(source, 'title', source)}"
+            f" "
+            f"({utils.get_peer_id(source) if 'utils' in globals() else getattr(source, 'id', '')})"
         )
 
     print()
