@@ -154,7 +154,7 @@ SOURCE_CHANNELS = [
 # Gold Signals 98% Sure       -> TP3 + TP4
 # GOLD HUNTER TRADE            -> TP3 + TP4
 # GOLD SIGNAL VIP              -> TP3 + TP6
-# SCALPING MARKET TRADING      -> TP4 + TP7
+# SCALPING MARKET TRADING      -> TP4 + TP6
 # Smart Money Trader           -> TP4 + TP6
 # GUNS THE TRADER              -> TP3 + TP4
 #
@@ -168,7 +168,7 @@ TP_MAPPING = {
 
     -1001859361786: (3, 6),
 
-    -1001392009006: (4, 7),
+    -1001392009006: (4, 6),
 
     -1001509147302: (4, 6),
 
@@ -333,7 +333,7 @@ def get_tp_mapping(
 
     if "SCALPING MARKET TRADING" in normalized:
 
-        return 4, 7
+        return 4, 6
 
     if "SMART MONEY TRADER" in normalized:
 
@@ -395,24 +395,50 @@ def normalize_text(text):
 def extract_direction(text):
 
     if not text:
-
         return None
 
     text_upper = text.upper()
 
-    if re.search(
-        r"\bBUY\b",
-        text_upper
-    ):
-
+    # Standard separated forms:
+    # BUY, SELL
+    if re.search(r"\bBUY\b", text_upper):
         return "BUY"
 
-    if re.search(
-        r"\bSELL\b",
-        text_upper
-    ):
-
+    if re.search(r"\bSELL\b", text_upper):
         return "SELL"
+
+    # Some source channels use compact instrument+direction forms:
+    # XAUUSDSELL
+    # XAUUSDBUY
+    # XAUSELL
+    # XAUBUY
+    if re.search(r"\bXAUUSD\s*(?:SELL|BUY)\b", text_upper):
+        return (
+            "SELL"
+            if re.search(r"\bXAUUSD\s*SELL\b", text_upper)
+            else "BUY"
+        )
+
+    if re.search(r"\bXAU\s*(?:SELL|BUY)\b", text_upper):
+        return (
+            "SELL"
+            if re.search(r"\bXAU\s*SELL\b", text_upper)
+            else "BUY"
+        )
+
+    # Compact forms can have no word boundary between XAUUSD and
+    # the direction, e.g. XAUUSDSELL.
+    if "XAUUSDSELL" in text_upper:
+        return "SELL"
+
+    if "XAUUSDBUY" in text_upper:
+        return "BUY"
+
+    if "XAUSELL" in text_upper:
+        return "SELL"
+
+    if "XAUBUY" in text_upper:
+        return "BUY"
 
     return None
 
@@ -444,7 +470,6 @@ def extract_direction(text):
 def extract_entry(text):
 
     if not text:
-
         return None
 
     # --------------------------------------------------------
@@ -453,7 +478,11 @@ def extract_entry(text):
 
     range_patterns = [
 
-        # BUY/SELL followed directly by range
+        # Standard BUY/SELL followed by range:
+        # BUY 4642/4650
+        # SELL 4642/4650
+        # BUY 4642 - 4650
+        # BUY 4642-4650
         (
             r"\b(?:BUY|SELL)\b\s+"
             r"(\d+(?:\.\d+)?)"
@@ -463,6 +492,41 @@ def extract_entry(text):
 
         (
             r"\b(?:BUY|SELL)\b\s+"
+            r"(\d+(?:\.\d+)?)"
+            r"\s*-\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        # Compact XAUUSD/XAU direction followed by range:
+        # XAUUSDSELL 4407/4416
+        # XAUUSDBUY 4429/4426
+        # XAU SELL 4410/4413
+        (
+            r"\b(?:XAUUSD|XAU)\s*(?:BUY|SELL)\s*"
+            r"(\d+(?:\.\d+)?)"
+            r"\s*[/_]\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        (
+            r"\b(?:XAUUSD|XAU)\s*(?:BUY|SELL)\s*"
+            r"(\d+(?:\.\d+)?)"
+            r"\s*-\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        # Fully compact forms without a word boundary:
+        # XAUUSDSELL4407/4416
+        # XAUUSDBUY4429/4426
+        (
+            r"XAUUSD(?:BUY|SELL)\s*"
+            r"(\d+(?:\.\d+)?)"
+            r"\s*[/_]\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        (
+            r"XAUUSD(?:BUY|SELL)\s*"
             r"(\d+(?:\.\d+)?)"
             r"\s*-\s*"
             r"(\d+(?:\.\d+)?)"
@@ -523,6 +587,19 @@ def extract_entry(text):
             r"(?:\s+00\b)?"
         ),
 
+        # Compact XAUUSDSELL 4407
+        # XAUUSDBUY 4426
+        (
+            r"XAUUSD(?:BUY|SELL)\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        # Compact XAU SELL 4407
+        (
+            r"\bXAU\s*(?:BUY|SELL)\s*"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
         # BUY GOLD 4642
         (
             r"\b(?:BUY|SELL)\b\s+"
@@ -575,25 +652,28 @@ def extract_entry(text):
 def extract_sl(text):
 
     if not text:
-
         return None
 
     patterns = [
 
         # SL 4640
-        r"\bSL\b\s*[:.\-]?\s*"
+        # SL: 4640
+        # SL. 4640
+        # SL - 4640
+        # SL @ 4640
+        r"\bSL\b\s*[@:.\-]?\s*"
         r"(\d+(?:\.\d+)?)",
 
         # STOPLOSS 4640
-        r"\bSTOPLOSS\b\s*[:.\-]?\s*"
+        r"\bSTOPLOSS\b\s*[@:.\-]?\s*"
         r"(\d+(?:\.\d+)?)",
 
         # STOP LOSS 4640
-        r"\bSTOP\s+LOSS\b\s*[:.\-]?\s*"
+        r"\bSTOP\s+LOSS\b\s*[@:.\-]?\s*"
         r"(\d+(?:\.\d+)?)",
 
         # STOP 4640
-        r"\bSTOP\b\s*[:.\-]?\s*"
+        r"\bSTOP\b\s*[@:.\-]?\s*"
         r"(\d+(?:\.\d+)?)",
     ]
 
@@ -633,21 +713,73 @@ def extract_sl(text):
 def extract_tp_levels(text):
 
     if not text:
-
         return {}
 
     tp_levels = {}
 
+    # --------------------------------------------------------
+    # UNICODE SUPERSCRIPT TP NUMBERS
+    # --------------------------------------------------------
+    #
+    # Some channels use:
+    #
+    # TP¹ 4398
+    # TP² 4401
+    # TP³ 4404
+    # TP⁴ 4407
+    # TP⁵ 4410
+    # TP⁶ 4413
+    #
+    # Convert the superscript number to the normal TP number.
+    #
+    superscript_map = {
+        "¹": "1",
+        "²": "2",
+        "³": "3",
+        "⁴": "4",
+        "⁵": "5",
+        "⁶": "6",
+        "⁷": "7",
+        "⁸": "8",
+        "⁹": "9",
+    }
+
+    normalized_tp_text = text
+
+    for superscript, normal in superscript_map.items():
+
+        normalized_tp_text = normalized_tp_text.replace(
+            f"TP{superscript}",
+            f"TP{normal}"
+        )
+
+    # --------------------------------------------------------
+    # STANDARD TP FORMATS
+    # --------------------------------------------------------
+    #
+    # Supports:
+    #
+    # TP1 4655
+    # TP1: 4655
+    # TP1 - 4655
+    # TP1=4655
+    # TP1. 4655
+    # TP1. @ 4655
+    # TP1 @ 4655
+    #
+    # The @ is deliberately optional because some source
+    # channels use it before the target price.
+    #
     pattern = (
         r"\bTP\s*([1-9])"
         r"\s*[:.\-=]?"
-        r"\s*"
+        r"\s*@?\s*"
         r"(\d+(?:\.\d+)?)"
     )
 
     matches = re.findall(
         pattern,
-        text,
+        normalized_tp_text,
         re.IGNORECASE
     )
 
