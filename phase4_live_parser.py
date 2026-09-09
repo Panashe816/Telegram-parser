@@ -1,7 +1,7 @@
 import os
 import re
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytz
 from dotenv import load_dotenv
@@ -1095,8 +1095,39 @@ def validate_signal(
 def parse_signal(
     message,
     channel_name,
-    channel_id=None
+    channel_id=None,
+    message_id=None
 ):
+
+    # --------------------------------------------------------
+    # SIGNAL METADATA
+    # --------------------------------------------------------
+
+    signal_time = datetime.now(
+        TIMEZONE
+    )
+
+    # Telegram message IDs are unique within each source channel.
+    # Combining the channel ID and message ID gives the signal
+    # a stable unique identifier for the executor.
+    if message_id is not None:
+        signal_id = (
+            f"SIG-{abs(int(channel_id))}"
+            f"-{message_id}"
+            if channel_id is not None
+            else f"SIG-{message_id}"
+        )
+    else:
+        signal_id = (
+            f"SIG-{abs(int(channel_id))}"
+            f"-{signal_time.strftime('%Y%m%d%H%M%S%f')}"
+            if channel_id is not None
+            else f"SIG-{signal_time.strftime('%Y%m%d%H%M%S%f')}"
+        )
+
+    valid_until = signal_time + timedelta(
+        hours=2
+    )
 
     message = normalize_text(
         message
@@ -1154,6 +1185,10 @@ def parse_signal(
                 "TP mapping",
             "channel": channel_name,
             "channel_id": channel_id,
+            "message_id": message_id,
+            "signal_id": signal_id,
+            "signal_time": signal_time,
+            "valid_until": valid_until,
             "direction": direction,
             "entry_low": entry_low,
             "entry_high": entry_high,
@@ -1215,6 +1250,14 @@ def parse_signal(
         "channel": channel_name,
 
         "channel_id": channel_id,
+
+        "message_id": message_id,
+
+        "signal_id": signal_id,
+
+        "signal_time": signal_time,
+
+        "valid_until": valid_until,
 
         "normalized_channel":
             normalize_channel_name(
@@ -1350,6 +1393,18 @@ def format_parsed_signal(
         "timestamp"
     )
 
+    signal_id = signal.get(
+        "signal_id"
+    )
+
+    signal_time = signal.get(
+        "signal_time"
+    )
+
+    valid_until = signal.get(
+        "valid_until"
+    )
+
     if timestamp:
 
         timestamp_text = timestamp.strftime(
@@ -1365,6 +1420,20 @@ def format_parsed_signal(
                 "%Y-%m-%d %H:%M:%S"
             )
         )
+
+    if signal_time:
+        signal_time_text = signal_time.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+    else:
+        signal_time_text = timestamp_text
+
+    if valid_until:
+        valid_until_text = valid_until.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+    else:
+        valid_until_text = ""
 
     # --------------------------------------------------------
     # ENTRY DISPLAY
@@ -1472,6 +1541,14 @@ def format_parsed_signal(
     lines.extend([
 
         "",
+
+        f"🆔 Signal ID: {signal_id}",
+
+        f"🕒 Signal Time: "
+        f"{signal_time_text}",
+
+        f"⏳ Valid Until: "
+        f"{valid_until_text}",
 
         "✅ Parser Status: VALID",
 
@@ -2080,7 +2157,8 @@ async def process_message(
         result = parse_signal(
             message=raw_text,
             channel_name=channel_name,
-            channel_id=channel_id
+            channel_id=channel_id,
+            message_id=event.id
         )
 
         # ----------------------------------------------------
