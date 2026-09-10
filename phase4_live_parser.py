@@ -502,14 +502,14 @@ def extract_entry(text):
         # XAUUSDBUY 4429/4426
         # XAU SELL 4410/4413
         (
-            r"\b(?:XAUUSD|XAU)\s*(?:BUY|SELL)\s*"
+            r"\b(?:XAUUSD|XAU)\s*(?:BUY|SELL)\s*(?:LIMIT|LIMT)?\s*"
             r"(\d+(?:\.\d+)?)"
             r"\s*[/_]\s*"
             r"(\d+(?:\.\d+)?)"
         ),
 
         (
-            r"\b(?:XAUUSD|XAU)\s*(?:BUY|SELL)\s*"
+            r"\b(?:XAUUSD|XAU)\s*(?:BUY|SELL)\s*(?:LIMIT|LIMT)?\s*"
             r"(\d+(?:\.\d+)?)"
             r"\s*-\s*"
             r"(\d+(?:\.\d+)?)"
@@ -519,14 +519,14 @@ def extract_entry(text):
         # XAUUSDSELL4407/4416
         # XAUUSDBUY4429/4426
         (
-            r"XAUUSD(?:BUY|SELL)\s*"
+            r"XAUUSD(?:BUY|SELL)\s*(?:LIMIT|LIMT)?\s*"
             r"(\d+(?:\.\d+)?)"
             r"\s*[/_]\s*"
             r"(\d+(?:\.\d+)?)"
         ),
 
         (
-            r"XAUUSD(?:BUY|SELL)\s*"
+            r"XAUUSD(?:BUY|SELL)\s*(?:LIMIT|LIMT)?\s*"
             r"(\d+(?:\.\d+)?)"
             r"\s*-\s*"
             r"(\d+(?:\.\d+)?)"
@@ -590,7 +590,7 @@ def extract_entry(text):
         # Compact XAUUSDSELL 4407
         # XAUUSDBUY 4426
         (
-            r"XAUUSD(?:BUY|SELL)\s*"
+            r"XAUUSD(?:BUY|SELL)\s*(?:LIMIT|LIMT)?\s*"
             r"(\d+(?:\.\d+)?)"
         ),
 
