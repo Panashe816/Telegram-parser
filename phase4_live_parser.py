@@ -75,7 +75,7 @@ LOCAL_SESSION_NAME = os.getenv(
 TEST_OUTPUT_CHANNEL_ID = int(
     os.getenv(
         "TELEGRAM_CHANNEL_ID",
-        "-1002933896146"
+        "-1003995895185"
     )
 )
 
