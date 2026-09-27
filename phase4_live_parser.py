@@ -117,25 +117,19 @@ SOURCE_CHANNELS = [
     # REAL SOURCE 2
     # --------------------------------------------------------
 
-    -1002000548854,      # GOLD HUNTER TRADE
+    -1004316213872,      # Daily Gold Signals
 
     # --------------------------------------------------------
     # REAL SOURCE 3
     # --------------------------------------------------------
 
-    -1001859361786,      # GOLD SIGNAL VIP
+    -1001685029638,      # Trading View
 
     # --------------------------------------------------------
     # REAL SOURCE 4
     # --------------------------------------------------------
 
-    -1001392009006,      # SCALPING MARKET TRADING
-
-    # --------------------------------------------------------
-    # REAL SOURCE 5
-    # --------------------------------------------------------
-
-    -1001509147302,      # Smart Money Trader
+    -1001303958625,      # KING OF XAUUSD
 
     # --------------------------------------------------------
     # TEST SOURCE
@@ -152,10 +146,9 @@ SOURCE_CHANNELS = [
 # Each channel has its own two execution targets.
 #
 # Gold Signals 98% Sure       -> TP3 + TP4
-# GOLD HUNTER TRADE            -> TP3 + TP4
-# GOLD SIGNAL VIP              -> TP3 + TP6
-# SCALPING MARKET TRADING      -> TP4 + TP6
-# Smart Money Trader           -> TP4 + TP6
+# Daily Gold Signals           -> TP5 + TP7
+# Trading View                 -> TP5 + TP8
+# KING OF XAUUSD               -> TP3 + TP5
 # GUNS THE TRADER              -> TP3 + TP4
 #
 # ============================================================
@@ -164,13 +157,11 @@ TP_MAPPING = {
 
     -1001920682501: (3, 4),
 
-    -1002000548854: (3, 4),
+    -1004316213872: (5, 7),
 
-    -1001859361786: (3, 6),
+    -1001685029638: (5, 8),
 
-    -1001392009006: (4, 6),
-
-    -1001509147302: (4, 6),
+    -1001303958625: (3, 5),
 
     -1003170522699: (3, 4),
 }
@@ -185,17 +176,14 @@ CHANNEL_DISPLAY_NAMES = {
     -1001920682501:
         "Gold Signals 98% Sure",
 
-    -1002000548854:
-        "GOLD HUNTER TRADE",
+    -1004316213872:
+        "Daily Gold Signals",
 
-    -1001859361786:
-        "GOLD SIGNAL VIP",
+    -1001685029638:
+        "Trading View",
 
-    -1001392009006:
-        "SCALPING MARKET TRADING®SMT",
-
-    -1001509147302:
-        "🔻Smart Money Trader🔻",
+    -1001303958625:
+        "KING OF XAUUSD",
 
     -1003170522699:
         "GUNS THE TRADER",
@@ -323,21 +311,17 @@ def get_tp_mapping(
 
         return 3, 4
 
-    if "GOLD HUNTER TRADE" in normalized:
+    if "DAILY GOLD SIGNALS" in normalized:
 
-        return 3, 4
+        return 5, 7
 
-    if "GOLD SIGNAL VIP" in normalized:
+    if "TRADING VIEW" in normalized:
 
-        return 3, 6
+        return 5, 8
 
-    if "SCALPING MARKET TRADING" in normalized:
+    if "KING OF XAUUSD" in normalized:
 
-        return 4, 6
-
-    if "SMART MONEY TRADER" in normalized:
-
-        return 4, 6
+        return 3, 5
 
     if "GUNS THE TRADER" in normalized:
 
@@ -477,6 +461,32 @@ def extract_entry(text):
     # --------------------------------------------------------
 
     range_patterns = [
+
+        # Daily Gold Signals:
+        # GOLD SELL 4332
+        # OTHER SELL 4335
+        # GOLD BUY 4332
+        # OTHER BUY 4335
+        (
+            r"\bGOLD\b\s+(?:BUY|SELL)\b\s+"
+            r"(\d+(?:\.\d+)?)"
+            r"[\s\S]*?"
+            r"\bOTHER\b\s+(?:BUY|SELL)\b\s+"
+            r"(\d+(?:\.\d+)?)"
+        ),
+
+        # Trading View:
+        # GOLD SELL 4374
+        # MORE SELL 4377
+        # GOLD BUY 4374
+        # MORE BUY 4377
+        (
+            r"\bGOLD\b\s+(?:BUY|SELL)\b\s+"
+            r"(\d+(?:\.\d+)?)"
+            r"[\s\S]*?"
+            r"\bMORE\b\s+(?:BUY|SELL)\b\s+"
+            r"(\d+(?:\.\d+)?)"
+        ),
 
         # Standard BUY/SELL followed by range:
         # BUY 4642/4650
