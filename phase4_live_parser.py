@@ -671,7 +671,7 @@ def extract_sl(text):
         # SL. 4640
         # SL - 4640
         # SL @ 4640
-        r"\bSL\b\s*[@:.\-]?\s*"
+        r"\bSL(?:\b|_)\s*[@:._\-]?\s*"
         r"(\d+(?:\.\d+)?)",
 
         # STOPLOSS 4640
@@ -782,6 +782,7 @@ def extract_tp_levels(text):
     #
     pattern = (
         r"\bTP\s*([1-9])"
+        r"(?=\s|[:.\-=]|$)"
         r"\s*[:.\-=]?"
         r"\s*@?\s*"
         r"(\d+(?:\.\d+)?)"
@@ -798,6 +799,45 @@ def extract_tp_levels(text):
         tp_levels[
             int(tp_number)
         ] = float(price)
+
+    # --------------------------------------------------------
+    # UNNUMBERED TP FORMAT
+    # --------------------------------------------------------
+    #
+    # Some channels send TPs positionally, for example:
+    #
+    # TP 4220
+    # TP 4215
+    # TP 4210
+    # TP 4205
+    # TP 4200
+    #
+    # These are interpreted in order as TP1, TP2, TP3, ...
+    # This is a fallback only, so explicitly numbered TP1, TP2,
+    # etc. continue to work exactly as before.
+    #
+    if not matches:
+
+        unnumbered_pattern = (
+            r"\bTP\b\s+"
+            r"(\d+(?:\.\d+)?)"
+        )
+
+        unnumbered_matches = re.findall(
+            unnumbered_pattern,
+            normalized_tp_text,
+            re.IGNORECASE
+        )
+
+        for index, price in enumerate(
+            unnumbered_matches,
+            start=1
+        ):
+
+            if index > 9:
+                break
+
+            tp_levels[index] = float(price)
 
     return dict(
         sorted(
