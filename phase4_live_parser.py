@@ -301,7 +301,7 @@ def get_tp_mapping(
 
     if "TRADING VIEW" in normalized:
 
-        return 5, 8
+        return 4, 8
 
     if "KING OF XAUUSD" in normalized:
 
