@@ -98,7 +98,7 @@ if not API_HASH:
 # SOURCE CHANNELS
 # ============================================================
 #
-# FIVE REAL SIGNAL SOURCES
+# THREE REAL SIGNAL SOURCES
 # PLUS GUNS THE TRADER AS TEST SOURCE
 #
 # Numeric IDs are deliberately used instead of usernames.
@@ -111,22 +111,16 @@ SOURCE_CHANNELS = [
     # REAL SOURCE 1
     # --------------------------------------------------------
 
-    -1001920682501,      # Gold Signals 98% Sure
+    -1004316213872,      # Daily Gold Signals
 
     # --------------------------------------------------------
     # REAL SOURCE 2
     # --------------------------------------------------------
 
-    -1004316213872,      # Daily Gold Signals
-
-    # --------------------------------------------------------
-    # REAL SOURCE 3
-    # --------------------------------------------------------
-
     -1001685029638,      # Trading View
 
     # --------------------------------------------------------
-    # REAL SOURCE 4
+    # REAL SOURCE 3
     # --------------------------------------------------------
 
     -1001303958625,      # KING OF XAUUSD
@@ -145,9 +139,8 @@ SOURCE_CHANNELS = [
 #
 # Each channel has its own two execution targets.
 #
-# Gold Signals 98% Sure       -> TP3 + TP4
 # Daily Gold Signals           -> TP5 + TP7
-# Trading View                 -> TP5 + TP8
+# Trading View                 -> TP4 + TP8
 # KING OF XAUUSD               -> TP3 + TP5
 # GUNS THE TRADER              -> TP3 + TP4
 #
@@ -155,11 +148,9 @@ SOURCE_CHANNELS = [
 
 TP_MAPPING = {
 
-    -1001920682501: (3, 4),
-
     -1004316213872: (5, 7),
 
-    -1001685029638: (5, 8),
+    -1001685029638: (4, 8),
 
     -1001303958625: (3, 5),
 
@@ -172,9 +163,6 @@ TP_MAPPING = {
 # ============================================================
 
 CHANNEL_DISPLAY_NAMES = {
-
-    -1001920682501:
-        "Gold Signals 98% Sure",
 
     -1004316213872:
         "Daily Gold Signals",
@@ -306,10 +294,6 @@ def get_tp_mapping(
     normalized = normalize_channel_name(
         channel_name
     )
-
-    if "GOLD SIGNALS 98 SURE" in normalized:
-
-        return 3, 4
 
     if "DAILY GOLD SIGNALS" in normalized:
 
