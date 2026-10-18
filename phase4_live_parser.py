@@ -2305,10 +2305,9 @@ async def process_message(
             )
 
             # Send, then record and display the actual publish time.
-            sent_message = await client.send_message(
-                TEST_OUTPUT_CHANNEL_ID,
-                output
-            )
+            sent_message = await send_output_message(client, output)
+            if sent_message is None:
+                return
             published_time = datetime.now(TIMEZONE)
             await client.edit_message(
                 TEST_OUTPUT_CHANNEL_ID,
@@ -2362,10 +2361,9 @@ async def process_message(
                 + handler_received_time.strftime("%Y-%m-%d %H:%M:%S %Z")
             )
 
-            sent_message = await client.send_message(
-                TEST_OUTPUT_CHANNEL_ID,
-                rejection_message
-            )
+            sent_message = await send_output_message(client, rejection_message)
+            if sent_message is None:
+                return
             published_time = datetime.now(TIMEZONE)
             await client.edit_message(
                 TEST_OUTPUT_CHANNEL_ID,
