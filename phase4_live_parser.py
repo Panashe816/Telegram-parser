@@ -2704,6 +2704,31 @@ async def main():
     # REGISTER MESSAGE HANDLER
     # --------------------------------------------------------
 
+    # Diagnostic observer: monitor source-channel events independently.
+    # This observer logs only configured sources and never parses or publishes.
+    @client.on(events.NewMessage())
+    async def source_event_observer(event):
+        try:
+            observed_chat_id = int(event.chat_id) if event.chat_id is not None else None
+            if observed_chat_id in SOURCE_CHANNELS:
+                observed_time = (
+                    event.date.astimezone(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S %Z")
+                    if event.date is not None
+                    else "Unavailable"
+                )
+                print(
+                    "🔎 SOURCE EVENT OBSERVER (DIAGNOSTIC ONLY)"
+                    f"\n   Chat ID: {observed_chat_id}"
+                    f"\n   Message ID: {event.id}"
+                    f"\n   Telegram message time: {observed_time}",
+                    flush=True
+                )
+        except Exception as diagnostic_exc:
+            print(
+                f"⚠️ Source event observer error: {diagnostic_exc}",
+                flush=True
+            )
+
     @client.on(
         events.NewMessage(
             chats=resolved_channels
