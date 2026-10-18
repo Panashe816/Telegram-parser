@@ -2274,8 +2274,8 @@ async def process_message(
                 else "Unavailable"
             )
             output += (
-                "\\n\\n🕒 Source message time: " + source_time_text
-                + "\\n🕒 Handler received time: "
+                "\n\n🕒 Source message time: " + source_time_text
+                + "\n🕒 Handler received time: "
                 + handler_received_time.strftime("%Y-%m-%d %H:%M:%S %Z")
             )
 
@@ -2289,7 +2289,7 @@ async def process_message(
                 TEST_OUTPUT_CHANNEL_ID,
                 sent_message.id,
                 sent_message.message
-                + "\\n🕒 Published time: "
+                + "\n🕒 Published time: "
                 + published_time.strftime("%Y-%m-%d %H:%M:%S %Z")
             )
 
@@ -2332,8 +2332,8 @@ async def process_message(
                 else "Unavailable"
             )
             rejection_message += (
-                "\\n\\n🕒 Source message time: " + source_time_text
-                + "\\n🕒 Handler received time: "
+                "\n\n🕒 Source message time: " + source_time_text
+                + "\n🕒 Handler received time: "
                 + handler_received_time.strftime("%Y-%m-%d %H:%M:%S %Z")
             )
 
@@ -2346,7 +2346,7 @@ async def process_message(
                 TEST_OUTPUT_CHANNEL_ID,
                 sent_message.id,
                 sent_message.message
-                + "\\n🕒 Published time: "
+                + "\n🕒 Published time: "
                 + published_time.strftime("%Y-%m-%d %H:%M:%S %Z")
             )
 
