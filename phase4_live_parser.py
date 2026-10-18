@@ -7,6 +7,7 @@ import pytz
 from dotenv import load_dotenv
 
 from telethon import TelegramClient, events, utils
+from telethon.errors import FloodWaitError
 from telethon.sessions import StringSession
 
 
@@ -82,6 +83,30 @@ TEST_OUTPUT_CHANNEL_ID = int(
 TIMEZONE = pytz.timezone(
     "Africa/Harare"
 )
+
+# Avoid repeated output attempts while Telegram enforces a FloodWait cooldown.
+OUTPUT_FLOOD_WAIT_UNTIL = None
+
+async def send_output_message(client, text):
+    global OUTPUT_FLOOD_WAIT_UNTIL
+
+    now = datetime.now(TIMEZONE)
+    if OUTPUT_FLOOD_WAIT_UNTIL is not None and now < OUTPUT_FLOOD_WAIT_UNTIL:
+        remaining = int((OUTPUT_FLOOD_WAIT_UNTIL - now).total_seconds())
+        print(f"⏸️ Telegram output cooldown active; skipping send ({remaining}s remaining).", flush=True)
+        return None
+
+    try:
+        return await client.send_message(TEST_OUTPUT_CHANNEL_ID, text)
+    except FloodWaitError as exc:
+        wait_seconds = max(0, int(exc.seconds))
+        OUTPUT_FLOOD_WAIT_UNTIL = datetime.now(TIMEZONE) + timedelta(seconds=wait_seconds)
+        print(
+            f"🚦 Telegram FloodWait on output send: {wait_seconds}s. "
+            "Output skipped; no retry will be attempted during this cooldown.",
+            flush=True
+        )
+        return None
 
 
 # ============================================================
