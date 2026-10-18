@@ -2127,6 +2127,14 @@ async def process_message(
 
     try:
 
+        # Capture diagnostic timestamps for this message.
+        handler_received_time = datetime.now(TIMEZONE)
+        source_message_time = (
+            event.date.astimezone(TIMEZONE)
+            if event.date is not None
+            else None
+        )
+
         # ----------------------------------------------------
         # GET RAW MESSAGE
         # ----------------------------------------------------
@@ -2259,10 +2267,30 @@ async def process_message(
                 result
             )
 
-            # Send parsed signal
-            await client.send_message(
+            # Add source and handler-received timestamps to the private output.
+            source_time_text = (
+                source_message_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+                if source_message_time is not None
+                else "Unavailable"
+            )
+            output += (
+                "\\n\\n🕒 Source message time: " + source_time_text
+                + "\\n🕒 Handler received time: "
+                + handler_received_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+            )
+
+            # Send, then record and display the actual publish time.
+            sent_message = await client.send_message(
                 TEST_OUTPUT_CHANNEL_ID,
                 output
+            )
+            published_time = datetime.now(TIMEZONE)
+            await client.edit_message(
+                TEST_OUTPUT_CHANNEL_ID,
+                sent_message.id,
+                sent_message.message
+                + "\\n🕒 Published time: "
+                + published_time.strftime("%Y-%m-%d %H:%M:%S %Z")
             )
 
             print(
@@ -2298,9 +2326,28 @@ async def process_message(
                 )
             )
 
-            await client.send_message(
+            source_time_text = (
+                source_message_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+                if source_message_time is not None
+                else "Unavailable"
+            )
+            rejection_message += (
+                "\\n\\n🕒 Source message time: " + source_time_text
+                + "\\n🕒 Handler received time: "
+                + handler_received_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+            )
+
+            sent_message = await client.send_message(
                 TEST_OUTPUT_CHANNEL_ID,
                 rejection_message
+            )
+            published_time = datetime.now(TIMEZONE)
+            await client.edit_message(
+                TEST_OUTPUT_CHANNEL_ID,
+                sent_message.id,
+                sent_message.message
+                + "\\n🕒 Published time: "
+                + published_time.strftime("%Y-%m-%d %H:%M:%S %Z")
             )
 
             print(
