@@ -2723,10 +2723,10 @@ async def main():
                 else "Unavailable"
             )
             print(
-                "\\n📨 INCOMING TELEGRAM EVENT (PRE-PARSE)"
-                f"\\n   Chat ID: {event_chat_id}"
-                f"\\n   Message ID: {event_message_id}"
-                f"\\n   Telegram message time: {event_timestamp}",
+                "\n📨 INCOMING TELEGRAM EVENT (PRE-PARSE)"
+                f"\n   Chat ID: {event_chat_id}"
+                f"\n   Message ID: {event_message_id}"
+                f"\n   Telegram message time: {event_timestamp}",
                 flush=True
             )
         except Exception as diagnostic_exc:
