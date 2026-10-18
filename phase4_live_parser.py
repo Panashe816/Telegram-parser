@@ -2713,6 +2713,28 @@ async def main():
         event
     ):
 
+        # Diagnostic only: log the incoming Telegram event before parsing.
+        try:
+            event_chat_id = event.chat_id
+            event_message_id = event.id
+            event_timestamp = (
+                event.date.astimezone(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S %Z")
+                if event.date is not None
+                else "Unavailable"
+            )
+            print(
+                "\\n📨 INCOMING TELEGRAM EVENT (PRE-PARSE)"
+                f"\\n   Chat ID: {event_chat_id}"
+                f"\\n   Message ID: {event_message_id}"
+                f"\\n   Telegram message time: {event_timestamp}",
+                flush=True
+            )
+        except Exception as diagnostic_exc:
+            print(
+                f"⚠️ Could not log incoming Telegram event: {diagnostic_exc}",
+                flush=True
+            )
+
         await process_message(
             client,
             event
