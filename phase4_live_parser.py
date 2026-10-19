@@ -2726,70 +2726,119 @@ async def main():
     # --------------------------------------------------------
     # REGISTER MESSAGE HANDLER
     # --------------------------------------------------------
+    # Keep event callbacks short: Telegram may deliver bursts of
+    # updates. Each event is scheduled independently so an output
+    # send/edit does not block processing of the next source event.
+    # Process both new posts and edits: some channels publish a
+    # preliminary post and then add the signal fields in an edit.
+    active_message_tasks = set()
+    recent_event_keys = set()
+    recent_event_key_order = []
+    max_recent_event_keys = 2000
 
-    # Diagnostic observer: monitor source-channel events independently.
-    # This observer logs only configured sources and never parses or publishes.
+    def _remember_event_key(event_key):
+        if event_key in recent_event_keys:
+            return False
+        recent_event_keys.add(event_key)
+        recent_event_key_order.append(event_key)
+        if len(recent_event_key_order) > max_recent_event_keys:
+            expired = recent_event_key_order.pop(0)
+            recent_event_keys.discard(expired)
+        return True
+
+    def _schedule_source_event(event, event_kind):
+        try:
+            source_id = int(event.chat_id) if event.chat_id is not None else None
+            message_id = int(event.id)
+            message_obj = event.message
+            edit_date = getattr(message_obj, "edit_date", None)
+            edit_epoch = int(edit_date.timestamp()) if edit_date else 0
+            event_key = (source_id, message_id, event_kind, edit_epoch)
+            if not _remember_event_key(event_key):
+                print(
+                    f"↩️ Duplicate {event_kind} event ignored: "
+                    f"chat_id={source_id} message_id={message_id} "
+                    f"edit_epoch={edit_epoch}",
+                    flush=True,
+                )
+                return
+
+            now_utc = datetime.utcnow()
+            event_time = edit_date or event.date
+            lag_seconds = (
+                (now_utc - event_time.replace(tzinfo=None)).total_seconds()
+                if event_time is not None else None
+            )
+            lag_text = f"{lag_seconds:.3f}s" if lag_seconds is not None else "UNKNOWN"
+            print(
+                f"📬 PHASE4_EVENT_RECEIVED kind={event_kind} "
+                f"chat_id={source_id} message_id={message_id} "
+                f"message_utc={event.date.isoformat() if event.date else 'NONE'} "
+                f"edit_utc={edit_date.isoformat() if edit_date else 'NONE'} "
+                f"callback_utc={now_utc.isoformat()} event_lag={lag_text}",
+                flush=True,
+            )
+
+            task = asyncio.create_task(
+                _process_source_event(client, event, event_kind, source_id, message_id)
+            )
+            active_message_tasks.add(task)
+            task.add_done_callback(active_message_tasks.discard)
+        except Exception as diagnostic_exc:
+            print(
+                f"⚠️ Could not schedule source event: {diagnostic_exc}",
+                flush=True,
+            )
+
+    async def _process_source_event(client, event, event_kind, source_id, message_id):
+        started_utc = datetime.utcnow()
+        try:
+            print(
+                f"🚦 PHASE4_PROCESS_START kind={event_kind} chat_id={source_id} "
+                f"message_id={message_id} started_utc={started_utc.isoformat()}",
+                flush=True,
+            )
+            await process_message(client, event)
+        except Exception as processing_exc:
+            print(
+                f"❌ PHASE4_TASK_ERROR kind={event_kind} chat_id={source_id} "
+                f"message_id={message_id}: {processing_exc}",
+                flush=True,
+            )
+        finally:
+            elapsed = (datetime.utcnow() - started_utc).total_seconds()
+            print(
+                f"🏁 PHASE4_PROCESS_END kind={event_kind} chat_id={source_id} "
+                f"message_id={message_id} elapsed={elapsed:.3f}s",
+                flush=True,
+            )
+
+    # Diagnostic observer: timestamp arrival before parsing starts.
     @client.on(events.NewMessage())
     async def source_event_observer(event):
         try:
-            observed_chat_id = int(event.chat_id) if event.chat_id is not None else None
-            if observed_chat_id in SOURCE_CHANNELS:
-                observed_time = (
-                    event.date.astimezone(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S %Z")
-                    if event.date is not None
-                    else "Unavailable"
-                )
+            source_id = int(event.chat_id) if event.chat_id is not None else None
+            if source_id in SOURCE_CHANNELS:
+                observed_utc = datetime.utcnow().isoformat()
+                message_utc = event.date.isoformat() if event.date else "NONE"
                 print(
-                    "🔎 SOURCE EVENT OBSERVER (DIAGNOSTIC ONLY)"
-                    f"\n   Chat ID: {observed_chat_id}"
-                    f"\n   Message ID: {event.id}"
-                    f"\n   Telegram message time: {observed_time}",
-                    flush=True
+                    f"🔎 PHASE4_SOURCE_OBSERVER chat_id={source_id} "
+                    f"message_id={event.id} message_utc={message_utc} "
+                    f"callback_utc={observed_utc}",
+                    flush=True,
                 )
         except Exception as diagnostic_exc:
-            print(
-                f"⚠️ Source event observer error: {diagnostic_exc}",
-                flush=True
-            )
+            print(f"⚠️ Source observer error: {diagnostic_exc}", flush=True)
 
-    @client.on(
-        events.NewMessage(
-            chats=resolved_channels
-        )
-    )
-    async def new_message_handler(
-        event
-    ):
+    @client.on(events.NewMessage(chats=resolved_channels))
+    async def new_message_handler(event):
+        _schedule_source_event(event, "NEW")
 
-        # Diagnostic only: log the incoming Telegram event before parsing.
-        try:
-            event_chat_id = event.chat_id
-            event_message_id = event.id
-            event_timestamp = (
-                event.date.astimezone(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S %Z")
-                if event.date is not None
-                else "Unavailable"
-            )
-            print(
-                "\n📨 INCOMING TELEGRAM EVENT (PRE-PARSE)"
-                f"\n   Chat ID: {event_chat_id}"
-                f"\n   Message ID: {event_message_id}"
-                f"\n   Telegram message time: {event_timestamp}",
-                flush=True
-            )
-        except Exception as diagnostic_exc:
-            print(
-                f"⚠️ Could not log incoming Telegram event: {diagnostic_exc}",
-                flush=True
-            )
+    @client.on(events.MessageEdited(chats=resolved_channels))
+    async def edited_message_handler(event):
+        _schedule_source_event(event, "EDIT")
 
-        await process_message(
-            client,
-            event
-        )
-
-    # --------------------------------------------------------
-    # LIVE LISTENER
+# LIVE LISTENER
     # --------------------------------------------------------
 
     print()
