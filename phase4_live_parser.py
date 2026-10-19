@@ -1231,6 +1231,29 @@ def parse_signal(
         channel_name=channel_name
     )
 
+    # Trading View normally executes TP4 + TP8. If TP8 is absent,
+    # fall back to TP4 + TP7 only when BOTH TP4 and TP7 are present.
+    # All other signal validation remains unchanged, and TP4 + TP8
+    # remains the first-priority mapping whenever TP8 is available.
+    normalized_source_name = normalize_channel_name(channel_name)
+    is_trading_view = (
+        channel_id == -1001685029638
+        or "TRADING VIEW" in normalized_source_name
+    )
+    if (
+        is_trading_view
+        and mapping == (4, 8)
+        and tp_levels.get(8) is None
+        and tp_levels.get(4) is not None
+        and tp_levels.get(7) is not None
+    ):
+        mapping = (4, 7)
+        print(
+            f"🔁 Trading View TP fallback applied: "
+            f"TP8 unavailable; using TP4 + TP7 "
+            f"(message_id={message_id})"
+        )
+
     # --------------------------------------------------------
     # BASIC VALIDATION
     # --------------------------------------------------------
