@@ -136,12 +136,6 @@ SOURCE_CHANNELS = [
     # REAL SOURCE 1
     # --------------------------------------------------------
 
-    -1004316213872,      # Daily Gold Signals
-
-    # --------------------------------------------------------
-    # REAL SOURCE 2
-    # --------------------------------------------------------
-
     -1001685029638,      # Trading View
 
     # --------------------------------------------------------
@@ -164,7 +158,6 @@ SOURCE_CHANNELS = [
 #
 # Each channel has its own two execution targets.
 #
-# Daily Gold Signals           -> TP5 + TP7
 # Trading View                 -> TP4 + TP8
 # KING OF XAUUSD               -> TP3 + TP5
 # GUNS THE TRADER              -> TP3 + TP4
@@ -172,8 +165,6 @@ SOURCE_CHANNELS = [
 # ============================================================
 
 TP_MAPPING = {
-
-    -1004316213872: (5, 7),
 
     -1001685029638: (4, 8),
 
@@ -188,9 +179,6 @@ TP_MAPPING = {
 # ============================================================
 
 CHANNEL_DISPLAY_NAMES = {
-
-    -1004316213872:
-        "Daily Gold Signals",
 
     -1001685029638:
         "Trading View",
@@ -319,10 +307,6 @@ def get_tp_mapping(
     normalized = normalize_channel_name(
         channel_name
     )
-
-    if "DAILY GOLD SIGNALS" in normalized:
-
-        return 5, 7
 
     if "TRADING VIEW" in normalized:
 
@@ -471,7 +455,7 @@ def extract_entry(text):
 
     range_patterns = [
 
-        # Daily Gold Signals:
+        # Signal format example:
         # GOLD SELL 4332
         # OTHER SELL 4335
         # GOLD BUY 4332
