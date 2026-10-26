@@ -384,6 +384,17 @@ def extract_direction(text):
     if re.search(r"\bSELL\b", text_upper):
         return "SELL"
 
+    # KING OF XAUUSD and similar sources may attach the entry digits
+    # directly to the direction, e.g. "XAUUSD SELL4020" or "XAUUSDBUY4020".
+    # Allow digits immediately after BUY/SELL while still requiring the
+    # XAUUSD instrument token to avoid matching unrelated text.
+    compact_instrument_direction = re.search(
+        r"\bXAUUSD\s*(BUY|SELL)(?=\s*\d)",
+        text_upper
+    )
+    if compact_instrument_direction:
+        return compact_instrument_direction.group(1)
+
     # Some source channels use compact instrument+direction forms:
     # XAUUSDSELL
     # XAUUSDBUY
@@ -590,10 +601,11 @@ def extract_entry(text):
             r"(?:\s+00\b)?"
         ),
 
-        # Compact XAUUSDSELL 4407
-        # XAUUSDBUY 4426
+        # XAUUSD SELL4020, XAUUSDSELL4020, XAUUSDBUY4020
+        # Supports an optional space between instrument and direction,
+        # and no space between direction and entry price.
         (
-            r"XAUUSD(?:BUY|SELL)\s*(?:LIMIT|LIMT)?\s*"
+            r"\bXAUUSD\s*(?:BUY|SELL)\s*(?:LIMIT|LIMT)?\s*"
             r"(\d+(?:\.\d+)?)"
         ),
 
