@@ -1438,6 +1438,8 @@ def format_parsed_signal(
         "channel"
     )
 
+    source_channel_id = signal.get("channel_id")
+
     tp_levels = signal.get(
         "tp_levels",
         {}
@@ -1539,6 +1541,8 @@ def format_parsed_signal(
         "────────────────────",
 
         f"📺 Channel: {channel_name}",
+
+        f"🆔 Source Channel ID: {source_channel_id}",
 
         "💎 Asset: XAU/USD",
 
