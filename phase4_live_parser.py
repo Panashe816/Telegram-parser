@@ -1260,43 +1260,53 @@ def parse_signal(
         channel_name=channel_name
     )
 
-    # Trading Master uses one selected TP for BOTH execution positions:
-    # TP6 has priority; if absent use TP5; otherwise use TP4.
-    # If none exists, leave TP6 as the required mapping so validation
-    # rejects the signal with a clear missing-TP error.
+    # Each source now resolves to ONE execution TP. The duplicated tuple
+    # keeps the existing validator/result schema intact while Phase 4 emits
+    # only Position 1 to Phase 6.
+    normalized_source_name = normalize_channel_name(channel_name)
+
     is_trading_master = (
         channel_id == -1003737121071
-        or "TRADING MASTER" in normalize_channel_name(channel_name)
+        or "TRADING MASTER" in normalized_source_name
     )
+    is_trading_view = (
+        channel_id == -1001685029638
+        or "TRADING VIEW" in normalized_source_name
+    )
+    is_king_of_xauusd = (
+        channel_id == -1001303958625
+        or "KING OF XAUUSD" in normalized_source_name
+    )
+    is_guns_the_trader = (
+        channel_id == -1003170522699
+        or "GUNS THE TRADER" in normalized_source_name
+    )
+
     if is_trading_master:
+        # TP6 is mandatory when present; otherwise use TP5, then TP4.
         selected_tp = next(
             (number for number in (6, 5, 4) if tp_levels.get(number) is not None),
             6
         )
         mapping = (selected_tp, selected_tp)
 
-    # Trading View normally executes TP4 + TP8. If TP8 is absent,
-    # fall back to TP4 + TP7 only when BOTH TP4 and TP7 are present.
-    # All other signal validation remains unchanged, and TP4 + TP8
-    # remains the first-priority mapping whenever TP8 is available.
-    normalized_source_name = normalize_channel_name(channel_name)
-    is_trading_view = (
-        channel_id == -1001685029638
-        or "TRADING VIEW" in normalized_source_name
-    )
-    if (
-        is_trading_view
-        and mapping == (4, 8)
-        and tp_levels.get(8) is None
-        and tp_levels.get(4) is not None
-        and tp_levels.get(7) is not None
-    ):
-        mapping = (4, 7)
-        print(
-            f"🔁 Trading View TP fallback applied: "
-            f"TP8 unavailable; using TP4 + TP7 "
-            f"(message_id={message_id})"
-        )
+    elif is_trading_view:
+        # TP8 only. If unavailable, use TP7. TP4 is not an execution target.
+        selected_tp = 8 if tp_levels.get(8) is not None else 7
+        mapping = (selected_tp, selected_tp)
+        if selected_tp == 7:
+            print(
+                f"🔁 Trading View fallback applied: TP8 unavailable; "
+                f"using TP7 (message_id={message_id})"
+            )
+
+    elif is_king_of_xauusd:
+        # One position uses TP5 only; TP3 is not required.
+        mapping = (5, 5)
+
+    elif is_guns_the_trader:
+        # One position uses TP4 only; TP3 is not required.
+        mapping = (4, 4)
 
     # --------------------------------------------------------
     # BASIC VALIDATION
@@ -1650,12 +1660,6 @@ def format_parsed_signal(
             f"Position 1 → "
             f"TP{mapping[0]} "
             f"({execution_tp_1:.2f})"
-        )
-
-        lines.append(
-            f"Position 2 → "
-            f"TP{mapping[1]} "
-            f"({execution_tp_2:.2f})"
         )
 
     else:
