@@ -123,7 +123,7 @@ if not API_HASH:
 # SOURCE CHANNELS
 # ============================================================
 #
-# THREE REAL SIGNAL SOURCES
+# FOUR REAL SIGNAL SOURCES
 # PLUS GUNS THE TRADER AS TEST SOURCE
 #
 # Numeric IDs are deliberately used instead of usernames.
@@ -167,6 +167,7 @@ SOURCE_CHANNELS = [
 # Trading View                 -> TP4 + TP8
 # KING OF XAUUSD               -> TP3 + TP5
 # GUNS THE TRADER              -> TP3 + TP4
+# Trading Master                -> TP6, else TP5, else TP4 (both positions)
 #
 # ============================================================
 
@@ -2707,7 +2708,7 @@ async def main():
     )
 
     # --------------------------------------------------------
-    # REQUIRE ALL 6 SOURCES
+    # REQUIRE ALL CONFIGURED SOURCES
     # --------------------------------------------------------
 
     if len(
