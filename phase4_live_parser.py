@@ -486,16 +486,16 @@ def extract_entry(text):
         # Restrict the separator to spaces/tabs so a single entry is
         # never combined with an SL or TP on the following line.
         (
-            r"\\b(?:GOLD|XAUUSD|XAU)\\b[ \\t]+(?:BUY|SELL)\\b[ \\t]+"
-            r"(\\d+(?:\\.\\d+)?)[ \\t]+"
-            r"(\\d+(?:\\.\\d+)?)(?=[ \\t]*(?:\\n|$))"
+            r"\b(?:GOLD|XAUUSD|XAU)\b[ \t]+(?:BUY|SELL)\b[ \t]+"
+            r"(\d+(?:\.\d+)?)[ \t]+"
+            r"(\d+(?:\.\d+)?)(?=[ \t]*(?:\n|$))"
         ),
 
         # Generic BUY/SELL two-price form, also restricted to one line.
         (
-            r"\\b(?:BUY|SELL)\\b[ \\t]+"
-            r"(\\d+(?:\\.\\d+)?)[ \\t]+"
-            r"(\\d+(?:\\.\\d+)?)(?=[ \\t]*(?:\\n|$))"
+            r"\b(?:BUY|SELL)\b[ \t]+"
+            r"(\d+(?:\.\d+)?)[ \t]+"
+            r"(\d+(?:\.\d+)?)(?=[ \t]*(?:\n|$))"
         ),
 
         # Signal format example:
