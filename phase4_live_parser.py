@@ -162,25 +162,27 @@ SOURCE_CHANNELS = [
 # EXECUTION TP MAPPING
 # ============================================================
 #
-# Each channel has its own two execution targets.
+# Each source resolves to one execution target for Phase 6.
 #
-# Trading View                 -> TP4 + TP8
-# KING OF XAUUSD               -> TP3 + TP5
-# GUNS THE TRADER              -> TP3 + TP4
-# Trading Master                -> TP6, else TP5, else TP4 (both positions)
+# Trading View                 -> TP8, fallback TP7
+# KING OF XAUUSD               -> TP5 only
+# GUNS THE TRADER              -> TP4 only
+# Trading Master               -> TP6, fallback TP5, then TP4
+#
+# The source-specific selection is applied in parse_signal().
+# Duplicate tuple values preserve the existing validation/result schema;
+# format_parsed_signal() publishes only Position 1.
 #
 # ============================================================
 
 TP_MAPPING = {
 
-    -1001685029638: (4, 8),
+    -1001685029638: (8, 8),
 
-    -1001303958625: (3, 5),
+    -1001303958625: (5, 5),
 
-    -1003170522699: (3, 4),
+    -1003170522699: (4, 4),
 
-    # Trading Master dynamically selects TP6, then TP5, then TP4.
-    # Both execution positions use the same selected TP.
     -1003737121071: (6, 6),
 }
 
