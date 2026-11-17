@@ -149,6 +149,12 @@ SOURCE_CHANNELS = [
     # --------------------------------------------------------
 
     -1003170522699,      # GUNS THE TRADER
+
+    # --------------------------------------------------------
+    # REAL SOURCE 4
+    # --------------------------------------------------------
+
+    -1003737121071,      # Trading Master (@TradingMasterAsad16)
 ]
 
 
@@ -171,6 +177,10 @@ TP_MAPPING = {
     -1001303958625: (3, 5),
 
     -1003170522699: (3, 4),
+
+    # Trading Master dynamically selects TP6, then TP5, then TP4.
+    # Both execution positions use the same selected TP.
+    -1003737121071: (6, 6),
 }
 
 
@@ -188,6 +198,9 @@ CHANNEL_DISPLAY_NAMES = {
 
     -1003170522699:
         "GUNS THE TRADER",
+
+    -1003737121071:
+        "Trading Master",
 }
 
 
@@ -465,6 +478,25 @@ def extract_entry(text):
     # --------------------------------------------------------
 
     range_patterns = [
+
+        # Trading Master and other sources may put both entry prices
+        # next to each other with spaces only on the SAME LINE:
+        # GOLD BUY 3850 3845
+        # GOLD SELL 4132 4137
+        # Restrict the separator to spaces/tabs so a single entry is
+        # never combined with an SL or TP on the following line.
+        (
+            r"\\b(?:GOLD|XAUUSD|XAU)\\b[ \\t]+(?:BUY|SELL)\\b[ \\t]+"
+            r"(\\d+(?:\\.\\d+)?)[ \\t]+"
+            r"(\\d+(?:\\.\\d+)?)(?=[ \\t]*(?:\\n|$))"
+        ),
+
+        # Generic BUY/SELL two-price form, also restricted to one line.
+        (
+            r"\\b(?:BUY|SELL)\\b[ \\t]+"
+            r"(\\d+(?:\\.\\d+)?)[ \\t]+"
+            r"(\\d+(?:\\.\\d+)?)(?=[ \\t]*(?:\\n|$))"
+        ),
 
         # Signal format example:
         # GOLD SELL 4332
@@ -1226,6 +1258,21 @@ def parse_signal(
         channel_id=channel_id,
         channel_name=channel_name
     )
+
+    # Trading Master uses one selected TP for BOTH execution positions:
+    # TP6 has priority; if absent use TP5; otherwise use TP4.
+    # If none exists, leave TP6 as the required mapping so validation
+    # rejects the signal with a clear missing-TP error.
+    is_trading_master = (
+        channel_id == -1003737121071
+        or "TRADING MASTER" in normalize_channel_name(channel_name)
+    )
+    if is_trading_master:
+        selected_tp = next(
+            (number for number in (6, 5, 4) if tp_levels.get(number) is not None),
+            6
+        )
+        mapping = (selected_tp, selected_tp)
 
     # Trading View normally executes TP4 + TP8. If TP8 is absent,
     # fall back to TP4 + TP7 only when BOTH TP4 and TP7 are present.
