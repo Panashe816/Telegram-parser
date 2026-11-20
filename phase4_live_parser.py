@@ -165,7 +165,7 @@ SOURCE_CHANNELS = [
 # Each source resolves to one execution target for Phase 6.
 #
 # Trading View                 -> TP8, fallback TP7
-# KING OF XAUUSD               -> TP5 only
+# KING OF XAUUSD               -> TP6, fallback TP5, then TP4
 # GUNS THE TRADER              -> TP4 only
 # Trading Master               -> TP6, fallback TP5, then TP4
 #
@@ -179,7 +179,7 @@ TP_MAPPING = {
 
     -1001685029638: (8, 8),
 
-    -1001303958625: (5, 5),
+    -1001303958625: (6, 6),
 
     -1003170522699: (4, 4),
 
@@ -330,7 +330,7 @@ def get_tp_mapping(
 
     if "KING OF XAUUSD" in normalized:
 
-        return 3, 5
+        return 6, 6
 
     if "GUNS THE TRADER" in normalized:
 
@@ -1353,8 +1353,13 @@ def parse_signal(
             )
 
     elif is_king_of_xauusd:
-        # One position uses TP5 only; TP3 is not required.
-        mapping = (5, 5)
+        # Prefer TP6, fall back to TP5, then TP4.
+        # One position uses the selected TP; TP3 is not required.
+        selected_tp = next(
+            (number for number in (6, 5, 4) if tp_levels.get(number) is not None),
+            6
+        )
+        mapping = (selected_tp, selected_tp)
 
     elif is_guns_the_trader:
         # One position uses TP4 only; TP3 is not required.
