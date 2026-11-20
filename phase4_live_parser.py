@@ -890,6 +890,10 @@ def extract_tp_levels(text):
 # PRICE VALIDATION
 # ============================================================
 
+# Maximum permitted XAUUSD entry-to-stop-loss distance.
+# On this setup, 300 pips = 30.0 XAUUSD price units.
+MAX_SL_DISTANCE = 30.0
+
 def validate_gold_price_range(
     price
 ):
@@ -1036,6 +1040,51 @@ def validate_signal(
                 f"SELL SL {stoploss} "
                 f"is not above entry "
                 f"{entry_high}"
+            )
+
+    # --------------------------------------------------------
+    # MAXIMUM STOP-LOSS DISTANCE
+    # --------------------------------------------------------
+    # BUY: use the lowest entry in the range (entry_low).
+    # SELL: use the highest entry in the range (entry_high).
+    # This measures risk from the entry closest to the SL.
+    # Reject only when the distance exceeds 30.0 price units.
+    # --------------------------------------------------------
+
+    if (
+        direction == "BUY"
+        and entry_low is not None
+        and stoploss is not None
+        and stoploss < entry_low
+    ):
+
+        sl_distance = entry_low - stoploss
+
+        if sl_distance > MAX_SL_DISTANCE:
+
+            errors.append(
+                f"BUY SL distance {sl_distance:.2f} "
+                f"exceeds maximum allowed "
+                f"{MAX_SL_DISTANCE:.2f} "
+                f"(entry {entry_low}, SL {stoploss})"
+            )
+
+    elif (
+        direction == "SELL"
+        and entry_high is not None
+        and stoploss is not None
+        and stoploss > entry_high
+    ):
+
+        sl_distance = stoploss - entry_high
+
+        if sl_distance > MAX_SL_DISTANCE:
+
+            errors.append(
+                f"SELL SL distance {sl_distance:.2f} "
+                f"exceeds maximum allowed "
+                f"{MAX_SL_DISTANCE:.2f} "
+                f"(entry {entry_high}, SL {stoploss})"
             )
 
     # --------------------------------------------------------
