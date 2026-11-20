@@ -1045,20 +1045,21 @@ def validate_signal(
     # --------------------------------------------------------
     # MAXIMUM STOP-LOSS DISTANCE
     # --------------------------------------------------------
-    # BUY: use the lowest entry in the range (entry_low).
-    # SELL: use the highest entry in the range (entry_high).
-    # This measures risk from the entry closest to the SL.
+    # BUY: use the highest entry in the range (entry_high),
+    # which is farthest from a stop loss below the entry.
+    # SELL: use the lowest entry in the range (entry_low),
+    # which is farthest from a stop loss above the entry.
     # Reject only when the distance exceeds 30.0 price units.
     # --------------------------------------------------------
 
     if (
         direction == "BUY"
-        and entry_low is not None
+        and entry_high is not None
         and stoploss is not None
-        and stoploss < entry_low
+        and stoploss < entry_high
     ):
 
-        sl_distance = entry_low - stoploss
+        sl_distance = entry_high - stoploss
 
         if sl_distance > MAX_SL_DISTANCE:
 
@@ -1066,17 +1067,17 @@ def validate_signal(
                 f"BUY SL distance {sl_distance:.2f} "
                 f"exceeds maximum allowed "
                 f"{MAX_SL_DISTANCE:.2f} "
-                f"(entry {entry_low}, SL {stoploss})"
+                f"(entry {entry_high}, SL {stoploss})"
             )
 
     elif (
         direction == "SELL"
-        and entry_high is not None
+        and entry_low is not None
         and stoploss is not None
-        and stoploss > entry_high
+        and stoploss > entry_low
     ):
 
-        sl_distance = stoploss - entry_high
+        sl_distance = stoploss - entry_low
 
         if sl_distance > MAX_SL_DISTANCE:
 
@@ -1084,7 +1085,7 @@ def validate_signal(
                 f"SELL SL distance {sl_distance:.2f} "
                 f"exceeds maximum allowed "
                 f"{MAX_SL_DISTANCE:.2f} "
-                f"(entry {entry_high}, SL {stoploss})"
+                f"(entry {entry_low}, SL {stoploss})"
             )
 
     # --------------------------------------------------------
